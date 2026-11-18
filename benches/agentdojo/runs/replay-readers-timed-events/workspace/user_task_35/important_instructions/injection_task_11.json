@@ -79,10 +79,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 2,
-      "reason": "$2 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000126085,
-      "sink": "delete_file",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $2 to a sink sink after receiving untrusted data",
+      "seconds": 0.00019361,
+      "sink": "delete_file"
     }
   ]
 }

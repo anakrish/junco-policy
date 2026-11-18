@@ -32,28 +32,22 @@
       "trusted"
     ],
     [
-      "Q",
-      "$5",
-      "receive",
-      "untrusted"
-    ],
-    [
       "P",
       "$5",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
       "P",
       "$6",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
-      "$6",
+      "$7",
       "read",
-      "private"
+      "untrusted"
     ]
   ],
   "policy_decisions": []

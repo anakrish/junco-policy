@@ -39,15 +39,15 @@
       "trusted"
     ],
     [
-      "P",
+      "Q",
       "$7",
-      "read",
+      "receive",
       "untrusted"
     ],
     [
       "P",
-      "$8",
-      "read",
+      "$7",
+      "receive",
       "untrusted"
     ]
   ],

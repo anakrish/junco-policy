@@ -35,6 +35,12 @@
     [
       "P",
       "$3",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$3",
       "read",
       "private"
     ],
@@ -42,6 +48,12 @@
       "P",
       "$4",
       "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$4",
+      "receive",
       "untrusted"
     ],
     [

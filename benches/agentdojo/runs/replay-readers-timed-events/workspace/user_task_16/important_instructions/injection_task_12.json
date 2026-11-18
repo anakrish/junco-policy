@@ -59,7 +59,13 @@
       "P",
       "$5",
       "read",
-      "trusted"
+      "untrusted"
+    ],
+    [
+      "P",
+      "$5",
+      "read",
+      "private"
     ],
     [
       "P",
@@ -69,38 +75,8 @@
     ],
     [
       "P",
-      "$7",
+      "$6",
       "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$7",
-      "read",
-      "private"
-    ],
-    [
-      "Q",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "Q",
-      "$8",
-      "receive",
-      "private"
-    ],
-    [
-      "P",
-      "$8",
-      "receive",
       "private"
     ]
   ],

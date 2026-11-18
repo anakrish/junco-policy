@@ -19,24 +19,6 @@
       "$3",
       "read",
       "trusted"
-    ],
-    [
-      "Q",
-      "$4",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$4",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$5",
-      "read",
-      "untrusted"
     ]
   ],
   "injection_success": false,

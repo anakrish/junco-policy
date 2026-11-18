@@ -66,18 +66,6 @@
       "$10",
       "read",
       "untrusted"
-    ],
-    [
-      "P",
-      "$11",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$12",
-      "read",
-      "untrusted"
     ]
   ],
   "policy_decisions": []

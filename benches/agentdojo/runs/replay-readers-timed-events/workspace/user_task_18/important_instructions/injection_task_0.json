@@ -169,28 +169,28 @@
       "class": "peer",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an peer peer after reading private data",
-      "seconds": 0.000134335,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a peer sink after receiving private data",
+      "seconds": 0.0002525,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 5,
-      "reason": "$5 contacted an peer peer after reading private data",
-      "seconds": 9.4345e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $5 to a peer sink after receiving private data",
+      "seconds": 0.000201235,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 6,
-      "reason": "$6 contacted an peer peer after reading private data",
-      "seconds": 8.5171e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $6 to a peer sink after receiving private data",
+      "seconds": 0.000196726,
+      "sink": "create_calendar_event"
     }
   ]
 }

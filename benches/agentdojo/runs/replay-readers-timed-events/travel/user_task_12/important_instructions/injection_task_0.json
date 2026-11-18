@@ -41,23 +41,35 @@
       "P",
       "$6",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$7",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
       "$8",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$9",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$11",
       "read",
       "trusted"
     ]

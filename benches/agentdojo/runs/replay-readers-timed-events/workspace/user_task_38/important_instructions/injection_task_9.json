@@ -11,31 +11,25 @@
       "P",
       "$1",
       "read",
-      "trusted"
-    ],
-    [
-      "P",
-      "$2",
-      "read",
       "untrusted"
     ],
     [
       "P",
-      "$2",
+      "$1",
       "read",
       "private"
     ],
     [
-      "Q",
-      "$3",
-      "receive",
-      "untrusted"
+      "P",
+      "$2",
+      "read",
+      "trusted"
     ],
     [
       "P",
       "$3",
-      "receive",
-      "untrusted"
+      "read",
+      "trusted"
     ],
     [
       "P",
@@ -559,10 +553,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 30,
-      "reason": "$30 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000166358,
-      "sink": "delete_file",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $30 to a sink sink after receiving untrusted data",
+      "seconds": 0.00026845,
+      "sink": "delete_file"
     }
   ]
 }

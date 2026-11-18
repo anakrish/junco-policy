@@ -349,10 +349,10 @@
       "class": "peer",
       "decision": "deny",
       "handle": 9,
-      "reason": "$9 contacted an peer peer after reading private data",
-      "seconds": 0.000147748,
-      "sink": "send_email",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $9 to a peer sink after receiving private data",
+      "seconds": 0.000254985,
+      "sink": "send_email"
     }
   ]
 }

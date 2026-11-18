@@ -30,13 +30,13 @@
       "P",
       "$5",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
       "$6",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
@@ -47,6 +47,24 @@
     [
       "P",
       "$8",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$9",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$11",
       "read",
       "untrusted"
     ]

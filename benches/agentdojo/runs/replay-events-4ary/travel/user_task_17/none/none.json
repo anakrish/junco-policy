@@ -24,7 +24,7 @@
       "P",
       "$4",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
@@ -36,13 +36,13 @@
       "P",
       "$6",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$7",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
@@ -54,60 +54,30 @@
       "P",
       "$9",
       "read",
+      "trusted"
+    ],
+    [
+      "Q",
+      "$10",
+      "receive",
       "untrusted"
     ],
     [
       "P",
       "$10",
-      "read",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$11",
+      "receive",
       "untrusted"
     ],
     [
       "P",
       "$11",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$12",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$13",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$14",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$15",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$16",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$17",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$18",
-      "read",
+      "receive",
       "untrusted"
     ]
   ],

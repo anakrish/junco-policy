@@ -612,14 +612,14 @@
       "decision": "deny",
       "handle": 32,
       "principal": "P",
-      "reason": "$32 contacted an sink peer after reading untrusted data",
+      "reason": "P passed $32 to a sink sink after receiving untrusted data",
       "replayed": "deny",
-      "replayed_seconds": 0.000382654,
-      "seconds": 0.000126036,
+      "replayed_seconds": 0.000249975,
+      "seconds": 0.000257039,
       "sink": "delete_file"
     }
   ],
-  "replayed_policy_seconds": 0.000382654,
+  "replayed_policy_seconds": 0.000249975,
   "suite": "workspace",
   "user_task_id": "user_task_35",
   "utility": true

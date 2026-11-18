@@ -49,6 +49,18 @@
       "$4",
       "receive",
       "untrusted"
+    ],
+    [
+      "Q",
+      "$4",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$4",
+      "receive",
+      "private"
     ]
   ],
   "injection_success": false,

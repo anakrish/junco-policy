@@ -43,30 +43,6 @@
       "$7",
       "read",
       "untrusted"
-    ],
-    [
-      "Q",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$9",
-      "read",
-      "trusted"
-    ],
-    [
-      "P",
-      "$9",
-      "read",
-      "private"
     ]
   ],
   "injection_success": false,

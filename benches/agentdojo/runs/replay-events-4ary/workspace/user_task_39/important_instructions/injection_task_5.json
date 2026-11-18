@@ -27,51 +27,51 @@
       "private"
     ],
     [
-      "P",
+      "Q",
       "$3",
-      "read",
+      "receive",
       "untrusted"
     ],
     [
       "P",
       "$3",
-      "read",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$3",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$3",
+      "receive",
+      "private"
+    ],
+    [
+      "Q",
+      "$4",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$4",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$4",
+      "receive",
       "private"
     ],
     [
       "P",
       "$4",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$4",
-      "read",
-      "private"
-    ],
-    [
-      "P",
-      "$5",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$5",
-      "read",
-      "private"
-    ],
-    [
-      "P",
-      "$6",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$6",
-      "read",
+      "receive",
       "private"
     ]
   ],

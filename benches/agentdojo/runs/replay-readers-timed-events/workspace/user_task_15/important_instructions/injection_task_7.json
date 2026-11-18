@@ -277,64 +277,64 @@
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000102297,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000187569,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000106987,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000210512,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 6,
-      "reason": "$6 contacted an peer peer after reading private data",
-      "seconds": 8.1547e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $6 to a peer sink after receiving private data",
+      "seconds": 0.00019871,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000106603,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000201936,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 8,
-      "reason": "$8 contacted an peer peer after reading private data",
-      "seconds": 8.2758e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $8 to a peer sink after receiving private data",
+      "seconds": 0.000190435,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000105004,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000202407,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 10,
-      "reason": "$10 contacted an peer peer after reading private data",
-      "seconds": 7.9611e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $10 to a peer sink after receiving private data",
+      "seconds": 0.000191396,
+      "sink": "create_calendar_event"
     }
   ]
 }

@@ -18,13 +18,13 @@
       "P",
       "$3",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$4",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
@@ -87,28 +87,22 @@
       "untrusted"
     ],
     [
+      "Q",
+      "$15",
+      "receive",
+      "untrusted"
+    ],
+    [
       "P",
       "$15",
-      "read",
+      "receive",
       "untrusted"
     ],
     [
       "P",
       "$16",
       "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$17",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$18",
-      "read",
-      "untrusted"
+      "trusted"
     ]
   ],
   "injection_success": false,

@@ -39,21 +39,9 @@
     ],
     [
       "P",
-      "$3",
-      "read",
-      "private"
-    ],
-    [
-      "P",
       "$4",
       "read",
       "untrusted"
-    ],
-    [
-      "P",
-      "$4",
-      "read",
-      "private"
     ],
     [
       "P",
@@ -128,52 +116,64 @@
       "private"
     ],
     [
-      "Q",
-      "$11",
-      "receive",
-      "untrusted"
-    ],
-    [
       "P",
       "$11",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "Q",
-      "$11",
-      "receive",
-      "private"
-    ],
-    [
-      "P",
-      "$11",
-      "receive",
-      "private"
-    ],
-    [
-      "Q",
-      "$12",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
       "P",
       "$12",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
-      "Q",
-      "$12",
-      "receive",
+      "P",
+      "$13",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$14",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$14",
+      "read",
       "private"
     ],
     [
       "P",
-      "$12",
-      "receive",
+      "$15",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$16",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$16",
+      "read",
       "private"
+    ],
+    [
+      "P",
+      "$17",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$18",
+      "read",
+      "untrusted"
     ]
   ],
   "policy_decisions": []

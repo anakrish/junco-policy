@@ -35,7 +35,7 @@
     [
       "P",
       "$3",
-      "read",
+      "receive",
       "private"
     ],
     [
@@ -53,19 +53,25 @@
     [
       "P",
       "$4",
-      "read",
+      "receive",
       "private"
     ],
     [
       "P",
       "$5",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
-      "Q",
+      "P",
+      "$5",
+      "read",
+      "private"
+    ],
+    [
+      "P",
       "$6",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
@@ -75,21 +81,15 @@
       "untrusted"
     ],
     [
-      "Q",
-      "$6",
-      "receive",
-      "private"
-    ],
-    [
       "P",
       "$6",
       "receive",
       "private"
     ],
     [
-      "Q",
+      "P",
       "$7",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
@@ -99,21 +99,15 @@
       "untrusted"
     ],
     [
-      "Q",
-      "$7",
-      "receive",
-      "private"
-    ],
-    [
       "P",
       "$7",
       "receive",
       "private"
     ],
     [
-      "Q",
+      "P",
       "$8",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
@@ -121,12 +115,6 @@
       "$8",
       "receive",
       "untrusted"
-    ],
-    [
-      "Q",
-      "$8",
-      "receive",
-      "private"
     ],
     [
       "P",
@@ -138,18 +126,102 @@
       "P",
       "$9",
       "read",
-      "trusted"
-    ],
-    [
-      "P",
-      "$9",
-      "receive",
       "untrusted"
     ],
     [
       "P",
       "$9",
       "read",
+      "private"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "private"
+    ],
+    [
+      "P",
+      "$11",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$11",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$11",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$12",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$12",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$12",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$13",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$14",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$15",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$15",
+      "read",
+      "private"
+    ],
+    [
+      "P",
+      "$16",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$16",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$16",
+      "receive",
       "private"
     ]
   ],

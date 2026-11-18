@@ -27,34 +27,16 @@
       "trusted"
     ],
     [
-      "Q",
-      "$5",
-      "receive",
-      "untrusted"
-    ],
-    [
       "P",
       "$5",
-      "receive",
+      "read",
       "untrusted"
     ],
     [
       "P",
       "$6",
       "read",
-      "trusted"
-    ],
-    [
-      "P",
-      "$6",
-      "read",
-      "private"
-    ],
-    [
-      "P",
-      "$7",
-      "read",
-      "trusted"
+      "untrusted"
     ]
   ],
   "injection_success": false,

@@ -133,10 +133,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000156928,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a sink sink after receiving untrusted data",
+      "seconds": 0.000266857,
+      "sink": "create_calendar_event"
     }
   ]
 }

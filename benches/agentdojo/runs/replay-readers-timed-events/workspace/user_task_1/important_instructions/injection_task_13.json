@@ -20,38 +20,26 @@
       "private"
     ],
     [
-      "P",
-      "$2",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$2",
-      "read",
-      "private"
-    ],
-    [
       "Q",
-      "$3",
+      "$2",
       "receive",
       "untrusted"
     ],
     [
       "P",
-      "$3",
+      "$2",
       "receive",
       "untrusted"
     ],
     [
       "Q",
-      "$3",
+      "$2",
       "receive",
       "private"
     ],
     [
       "P",
-      "$3",
+      "$2",
       "receive",
       "private"
     ]

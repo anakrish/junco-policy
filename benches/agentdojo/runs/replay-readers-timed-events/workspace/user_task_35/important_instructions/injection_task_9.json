@@ -97,19 +97,19 @@
       "class": "sink",
       "decision": "deny",
       "handle": 1,
-      "reason": "$1 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000121416,
-      "sink": "delete_file",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $1 to a sink sink after receiving untrusted data",
+      "seconds": 0.000244054,
+      "sink": "delete_file"
     },
     {
       "class": "sink",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an sink peer after reading untrusted data",
-      "seconds": 9.5813e-05,
-      "sink": "delete_file",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a sink sink after receiving untrusted data",
+      "seconds": 0.000221322,
+      "sink": "delete_file"
     }
   ]
 }

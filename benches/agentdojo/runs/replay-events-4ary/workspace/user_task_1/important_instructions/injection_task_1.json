@@ -25,18 +25,6 @@
       "$2",
       "receive",
       "untrusted"
-    ],
-    [
-      "Q",
-      "$2",
-      "receive",
-      "private"
-    ],
-    [
-      "P",
-      "$2",
-      "receive",
-      "private"
     ]
   ],
   "injection_success": false,

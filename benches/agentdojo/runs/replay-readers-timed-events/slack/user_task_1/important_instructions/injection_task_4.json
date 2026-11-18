@@ -127,10 +127,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000183814,
-      "sink": "get_webpage",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a sink sink after receiving untrusted data",
+      "seconds": 0.000269212,
+      "sink": "get_webpage"
     }
   ]
 }

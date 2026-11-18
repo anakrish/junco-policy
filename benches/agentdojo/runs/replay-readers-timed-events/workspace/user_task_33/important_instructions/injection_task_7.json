@@ -133,19 +133,19 @@
       "class": "peer",
       "decision": "deny",
       "handle": 2,
-      "reason": "$2 contacted an peer peer after reading private data",
-      "seconds": 0.000151962,
-      "sink": "send_email",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $2 to a peer sink after receiving private data",
+      "seconds": 0.000248633,
+      "sink": "send_email"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000101824,
-      "sink": "send_email",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000215341,
+      "sink": "send_email"
     }
   ]
 }

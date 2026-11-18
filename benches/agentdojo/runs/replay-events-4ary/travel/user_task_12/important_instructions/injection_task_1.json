@@ -67,24 +67,6 @@
       "$11",
       "read",
       "trusted"
-    ],
-    [
-      "P",
-      "$12",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$13",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$14",
-      "read",
-      "untrusted"
     ]
   ],
   "injection_success": false,

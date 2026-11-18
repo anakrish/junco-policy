@@ -127,10 +127,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 7,
-      "reason": "$7 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000224307,
-      "sink": "add_user_to_channel",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $7 to a sink sink after receiving untrusted data",
+      "seconds": 0.000234367,
+      "sink": "add_user_to_channel"
     }
   ]
 }

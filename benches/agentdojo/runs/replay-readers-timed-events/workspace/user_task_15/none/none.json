@@ -229,46 +229,46 @@
       "class": "peer",
       "decision": "deny",
       "handle": 2,
-      "reason": "$2 contacted an peer peer after reading private data",
-      "seconds": 9.9648e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $2 to a peer sink after receiving private data",
+      "seconds": 0.000197188,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an peer peer after reading private data",
-      "seconds": 7.6697e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a peer sink after receiving private data",
+      "seconds": 0.000151613,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 5,
-      "reason": "$5 contacted an peer peer after reading private data",
-      "seconds": 7.3444e-05,
-      "sink": "reschedule_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $5 to a peer sink after receiving private data",
+      "seconds": 0.000147875,
+      "sink": "reschedule_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an peer peer after reading private data",
-      "seconds": 9.3163e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a peer sink after receiving private data",
+      "seconds": 0.000219809,
+      "sink": "create_calendar_event"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 9,
-      "reason": "$9 contacted an peer peer after reading private data",
-      "seconds": 8.0322e-05,
-      "sink": "create_calendar_event",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $9 to a peer sink after receiving private data",
+      "seconds": 0.000200243,
+      "sink": "create_calendar_event"
     }
   ]
 }

@@ -73,10 +73,10 @@
       "class": "peer",
       "decision": "deny",
       "handle": 2,
-      "reason": "$2 contacted an peer peer after reading private data",
-      "seconds": 0.000133551,
-      "sink": "update_scheduled_transaction",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $2 to a peer sink after receiving private data",
+      "seconds": 0.000188952,
+      "sink": "update_scheduled_transaction"
     }
   ]
 }

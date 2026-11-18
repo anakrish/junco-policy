@@ -160,5 +160,5 @@
   "replayed_policy_seconds": 0.0,
   "suite": "workspace",
   "user_task_id": "user_task_36",
-  "utility": false
+  "utility": true
 }

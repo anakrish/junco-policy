@@ -35,13 +35,61 @@
       "P",
       "$5",
       "read",
+      "trusted"
+    ],
+    [
+      "Q",
+      "$6",
+      "receive",
       "untrusted"
     ],
     [
       "P",
       "$6",
-      "read",
+      "receive",
       "untrusted"
+    ],
+    [
+      "Q",
+      "$7",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$7",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$8",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$8",
+      "read",
+      "private"
+    ],
+    [
+      "P",
+      "$9",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$11",
+      "read",
+      "trusted"
     ]
   ],
   "policy_decisions": []

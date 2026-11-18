@@ -41,11 +41,23 @@
       "P",
       "$6",
       "read",
-      "untrusted"
+      "trusted"
+    ],
+    [
+      "P",
+      "$6",
+      "read",
+      "private"
     ],
     [
       "P",
       "$7",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$8",
       "read",
       "untrusted"
     ]

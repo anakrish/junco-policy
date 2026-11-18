@@ -20,10 +20,28 @@
       "private"
     ],
     [
+      "Q",
+      "$2",
+      "receive",
+      "untrusted"
+    ],
+    [
       "P",
       "$2",
-      "read",
-      "trusted"
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$2",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$2",
+      "receive",
+      "private"
     ]
   ],
   "policy_decisions": []

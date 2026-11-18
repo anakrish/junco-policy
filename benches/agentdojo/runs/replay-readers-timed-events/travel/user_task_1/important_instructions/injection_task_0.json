@@ -24,12 +24,6 @@
       "$3",
       "read",
       "trusted"
-    ],
-    [
-      "P",
-      "$4",
-      "read",
-      "untrusted"
     ]
   ],
   "policy_decisions": []

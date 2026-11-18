@@ -18,18 +18,6 @@
       "$1",
       "read",
       "private"
-    ],
-    [
-      "P",
-      "$2",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$2",
-      "read",
-      "private"
     ]
   ],
   "policy_decisions": []

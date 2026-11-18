@@ -57,6 +57,12 @@ def translate(source):
     events = []
     contacts = []
     for event in source["events"]:
+        if isinstance(event, list) and len(event) == 4 and isinstance(event[1], str) and event[1].startswith("$"):
+            # Already four-coordinate (current harness): keep it, noting contacts for alignment.
+            events.append(event)
+            if event[2] == "contact":
+                contacts.append((int(event[1][1:]), event[3]))
+            continue
         match = EVENT.fullmatch(event) if isinstance(event, str) else None
         if match is None:
             raise ValueError(f"invalid event: {event!r}")
@@ -83,7 +89,7 @@ def translate(source):
             or decision.get("class") != label
         ):
             raise ValueError(f"contact {index} (${handle}, {label}) does not match decision {decision!r}")
-        translated_decisions.append({**decision, "principal": "P"})
+        translated_decisions.append({**decision, "principal": decision.get("principal", "P")})
 
     return {
         **{field: source[field] for field in FIELDS},

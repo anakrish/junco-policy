@@ -18,13 +18,13 @@
       "P",
       "$3",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$4",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
@@ -36,13 +36,13 @@
       "P",
       "$6",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
       "$7",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
@@ -61,6 +61,72 @@
       "$10",
       "read",
       "untrusted"
+    ],
+    [
+      "P",
+      "$11",
+      "read",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$12",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$12",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$13",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$13",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$14",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$14",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$15",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$15",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$16",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$17",
+      "read",
+      "trusted"
     ]
   ],
   "injection_success": false,

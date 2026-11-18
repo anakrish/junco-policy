@@ -436,7 +436,9 @@ calls. A script mirrors the log layout and holds `{"p": [assistant messages], "q
 [result arguments]}`; `camel-prompt-injection/benchmarks/junco_vs_camel/junco_trace_replay.py scripts`
 derives them from a previous run, reconstructing hidden Q values from the arguments the
 run later resolved. Tasks without a script are skipped. `--out NAME` writes logs under
-`benches/agentdojo/runs/NAME` so the replay does not overwrite the source run.
+`benches/agentdojo/runs/NAME` so the replay does not overwrite the source run. The same
+script's `checks` command judges a replay's calls with CaMeL's suite policies and writes the
+`checks.jsonl` that the paper's `figures/agentdojo/generate.py` joins with the replay logs.
 
 `--events DIR --out NAME` replays saved events through the four-coordinate policy,
 without Python, tool execution, model calls or credentials. Live logs can be used

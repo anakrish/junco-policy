@@ -538,6 +538,9 @@ impl<'a> Run<'a> {
                     cursor += 1;
                 }
                 value = value.get(&reference[start..cursor]).ok_or_else(missing)?;
+            } else if let Some((key, next)) = quoted_key(reference, cursor) {
+                value = value.get(key).ok_or_else(missing)?;
+                cursor = next;
             } else {
                 let start = cursor + 1;
                 let end = reference[start..].find(']').ok_or_else(missing)? + start;
@@ -1038,6 +1041,10 @@ fn reference_end(text: &str, start: usize) -> Option<usize> {
                 }
             }
             Some(b'[') => {
+                if let Some((_, next)) = quoted_key(text, end) {
+                    end = next;
+                    continue;
+                }
                 let mut close = end + 1;
                 while bytes.get(close).is_some_and(u8::is_ascii_digit) {
                     close += 1;
@@ -1051,6 +1058,18 @@ fn reference_end(text: &str, start: usize) -> Option<usize> {
         }
     }
     Some(end)
+}
+
+/// A Python-style `['key']` or `["key"]` segment whose `[` is at `open`, as P-LLMs write for
+/// object fields: the key and the index after `]`.
+fn quoted_key(text: &str, open: usize) -> Option<(&str, usize)> {
+    let bytes = text.as_bytes();
+    let quote = *bytes
+        .get(open + 1)
+        .filter(|byte| matches!(byte, b'\'' | b'"'))?;
+    let start = open + 2;
+    let close = text[start..].find(quote as char)? + start;
+    (bytes.get(close + 1) == Some(&b']')).then(|| (&text[start..close], close + 2))
 }
 
 fn truthy(value: &Value) -> bool {
@@ -1249,6 +1268,27 @@ pub async fn self_test(python: &Path, script: &Path) -> Result<(), String> {
     let mut refs = Vec::new();
     assert_eq!(run.resolve(&json!({"array":["$1.items[0].id", "$1.enabled"],"text":"Résumé $1.items[0].id: $1.body", "amount":"$1.amount", "object":"$2"}), &mut refs)?,
         json!({"array":[42,false],"text":"Résumé 42: $999","amount":98.7,"object":{"recipient":"friend@example.org"}}));
+    assert_eq!(
+        run.resolve(
+            &json!([
+                "$2['recipient']",
+                "$1[\"items\"][0].id",
+                "to $2['recipient']!"
+            ]),
+            &mut refs
+        )?,
+        json!(["friend@example.org", 42, "to friend@example.org!"])
+    );
+    // A missing key fails like `$2.missing`; it is not interpolated as text.
+    assert!(
+        run.resolve(&json!("$2['missing']"), &mut refs)
+            .unwrap_err()
+            .starts_with("ReferenceError:")
+    );
+    assert_eq!(
+        run.resolve(&json!("$2['open"), &mut refs)?,
+        json!("{\"recipient\":\"friend@example.org\"}['open")
+    );
     assert!(
         run.resolve(&json!("$1.missing"), &mut refs)
             .unwrap_err()

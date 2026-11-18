@@ -23,25 +23,31 @@
       "P",
       "$3",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$4",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
       "$5",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$6",
       "read",
-      "untrusted"
+      "trusted"
+    ],
+    [
+      "P",
+      "$7",
+      "read",
+      "trusted"
     ]
   ],
   "policy_decisions": []

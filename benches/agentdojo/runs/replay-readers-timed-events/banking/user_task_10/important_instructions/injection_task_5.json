@@ -97,19 +97,19 @@
       "class": "sink",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000150353,
-      "sink": "send_money",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a sink sink after receiving untrusted data",
+      "seconds": 0.000232292,
+      "sink": "send_money"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 3,
-      "reason": "$3 contacted an peer peer after reading private data",
-      "seconds": 0.000103896,
-      "sink": "send_money",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $3 to a peer sink after receiving private data",
+      "seconds": 0.000210381,
+      "sink": "send_money"
     }
   ]
 }

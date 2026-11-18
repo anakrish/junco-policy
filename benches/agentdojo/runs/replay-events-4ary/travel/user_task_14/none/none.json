@@ -30,6 +30,24 @@
       "P",
       "$5",
       "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$6",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$7",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$8",
+      "read",
       "untrusted"
     ]
   ],

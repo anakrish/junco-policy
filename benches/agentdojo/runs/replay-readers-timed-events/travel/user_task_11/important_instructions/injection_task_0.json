@@ -23,13 +23,13 @@
       "P",
       "$3",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
       "$4",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
@@ -59,49 +59,7 @@
       "P",
       "$9",
       "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$10",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$11",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$12",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$13",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$14",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$15",
-      "read",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$16",
-      "read",
-      "untrusted"
+      "trusted"
     ]
   ],
   "policy_decisions": []

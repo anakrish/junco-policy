@@ -54,6 +54,18 @@
       "$4",
       "receive",
       "untrusted"
+    ],
+    [
+      "Q",
+      "$4",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$4",
+      "receive",
+      "private"
     ]
   ],
   "policy_decisions": []

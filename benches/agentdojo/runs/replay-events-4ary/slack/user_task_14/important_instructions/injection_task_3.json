@@ -97,6 +97,18 @@
       "$6",
       "receive",
       "untrusted"
+    ],
+    [
+      "Q",
+      "$6",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$6",
+      "receive",
+      "private"
     ]
   ],
   "injection_success": false,

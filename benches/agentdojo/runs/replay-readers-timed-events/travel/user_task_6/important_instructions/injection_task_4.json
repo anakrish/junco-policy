@@ -54,30 +54,6 @@
       "$7",
       "receive",
       "untrusted"
-    ],
-    [
-      "Q",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$8",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "Q",
-      "$9",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$9",
-      "receive",
-      "untrusted"
     ]
   ],
   "policy_decisions": []

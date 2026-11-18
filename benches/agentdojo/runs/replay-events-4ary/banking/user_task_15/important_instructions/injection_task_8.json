@@ -42,23 +42,17 @@
       "P",
       "$4",
       "read",
-      "trusted"
-    ],
-    [
-      "P",
-      "$5",
-      "read",
       "untrusted"
     ],
     [
       "P",
-      "$5",
+      "$4",
       "read",
       "private"
     ],
     [
       "P",
-      "$6",
+      "$5",
       "read",
       "trusted"
     ],
@@ -66,17 +60,11 @@
       "P",
       "$6",
       "read",
-      "private"
-    ],
-    [
-      "P",
-      "$7",
-      "read",
       "untrusted"
     ],
     [
       "P",
-      "$7",
+      "$6",
       "read",
       "private"
     ]

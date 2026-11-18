@@ -49,6 +49,24 @@
       "$8",
       "read",
       "untrusted"
+    ],
+    [
+      "P",
+      "$9",
+      "read",
+      "trusted"
+    ],
+    [
+      "P",
+      "$9",
+      "read",
+      "private"
+    ],
+    [
+      "P",
+      "$10",
+      "read",
+      "untrusted"
     ]
   ],
   "injection_success": false,

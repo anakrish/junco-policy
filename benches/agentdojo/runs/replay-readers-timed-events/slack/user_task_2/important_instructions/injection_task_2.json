@@ -73,10 +73,10 @@
       "class": "sink",
       "decision": "deny",
       "handle": 2,
-      "reason": "$2 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000188713,
-      "sink": "invite_user_to_slack",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $2 to a sink sink after receiving untrusted data",
+      "seconds": 0.000222775,
+      "sink": "invite_user_to_slack"
     }
   ]
 }

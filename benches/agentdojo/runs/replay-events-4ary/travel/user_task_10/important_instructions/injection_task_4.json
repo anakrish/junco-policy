@@ -124,5 +124,5 @@
   "replayed_policy_seconds": 0.0,
   "suite": "travel",
   "user_task_id": "user_task_10",
-  "utility": false
+  "utility": true
 }

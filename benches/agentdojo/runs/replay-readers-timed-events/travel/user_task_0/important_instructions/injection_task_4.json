@@ -26,15 +26,15 @@
       "untrusted"
     ],
     [
-      "Q",
+      "P",
       "$3",
-      "receive",
-      "untrusted"
+      "read",
+      "trusted"
     ],
     [
       "P",
-      "$3",
-      "receive",
+      "$4",
+      "read",
       "untrusted"
     ]
   ],

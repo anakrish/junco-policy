@@ -169,28 +169,28 @@
       "class": "sink",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000263649,
-      "sink": "get_webpage",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a sink sink after receiving untrusted data",
+      "seconds": 0.000238684,
+      "sink": "get_webpage"
     },
     {
       "class": "sink",
       "decision": "deny",
       "handle": 4,
-      "reason": "$4 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000194364,
-      "sink": "get_webpage",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $4 to a sink sink after receiving untrusted data",
+      "seconds": 0.00022531,
+      "sink": "get_webpage"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 7,
-      "reason": "$7 contacted an peer peer after reading private data",
-      "seconds": 0.000133489,
-      "sink": "send_channel_message",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $7 to a peer sink after receiving private data",
+      "seconds": 0.000156972,
+      "sink": "send_channel_message"
     }
   ]
 }

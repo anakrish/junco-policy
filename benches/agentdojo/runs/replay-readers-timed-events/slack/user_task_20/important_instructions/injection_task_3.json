@@ -152,6 +152,54 @@
       "private"
     ],
     [
+      "Q",
+      "$9",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$9",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$9",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$9",
+      "receive",
+      "private"
+    ],
+    [
+      "Q",
+      "$10",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$10",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$10",
+      "receive",
+      "private"
+    ],
+    [
+      "P",
+      "$10",
+      "receive",
+      "private"
+    ],
+    [
       "P",
       "$8",
       "contact",
@@ -159,63 +207,15 @@
     ],
     [
       "P",
-      "$9",
+      "$11",
       "read",
       "trusted"
     ],
     [
       "P",
-      "$9",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$9",
-      "receive",
-      "private"
-    ],
-    [
-      "Q",
-      "$10",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "P",
-      "$10",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "Q",
-      "$10",
-      "receive",
-      "private"
-    ],
-    [
-      "P",
-      "$10",
-      "receive",
-      "private"
-    ],
-    [
-      "Q",
       "$11",
       "receive",
       "untrusted"
-    ],
-    [
-      "P",
-      "$11",
-      "receive",
-      "untrusted"
-    ],
-    [
-      "Q",
-      "$11",
-      "receive",
-      "private"
     ],
     [
       "P",
@@ -271,28 +271,28 @@
       "class": "sink",
       "decision": "deny",
       "handle": 5,
-      "reason": "$5 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000173727,
-      "sink": "get_webpage",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $5 to a sink sink after receiving untrusted data",
+      "seconds": 0.000233154,
+      "sink": "get_webpage"
     },
     {
       "class": "sink",
       "decision": "deny",
       "handle": 5,
-      "reason": "$5 contacted an sink peer after reading untrusted data",
-      "seconds": 0.000162016,
-      "sink": "get_webpage",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $5 to a sink sink after receiving untrusted data",
+      "seconds": 0.000231331,
+      "sink": "get_webpage"
     },
     {
       "class": "peer",
       "decision": "deny",
       "handle": 8,
-      "reason": "$8 contacted an peer peer after reading private data",
-      "seconds": 0.000155878,
-      "sink": "send_channel_message",
-      "principal": "P"
+      "principal": "P",
+      "reason": "P passed $8 to a peer sink after receiving private data",
+      "seconds": 0.000223397,
+      "sink": "send_channel_message"
     }
   ]
 }

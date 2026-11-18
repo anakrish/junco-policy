@@ -111,9 +111,27 @@
       "untrusted"
     ],
     [
+      "Q",
+      "$19",
+      "receive",
+      "untrusted"
+    ],
+    [
       "P",
       "$19",
-      "read",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "Q",
+      "$20",
+      "receive",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$20",
+      "receive",
       "untrusted"
     ]
   ],

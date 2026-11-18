@@ -17,13 +17,13 @@
       "P",
       "$2",
       "read",
-      "untrusted"
+      "trusted"
     ],
     [
       "P",
       "$3",
       "read",
-      "trusted"
+      "untrusted"
     ],
     [
       "P",
@@ -42,6 +42,18 @@
       "$5",
       "read",
       "private"
+    ],
+    [
+      "P",
+      "$6",
+      "read",
+      "untrusted"
+    ],
+    [
+      "P",
+      "$7",
+      "read",
+      "untrusted"
     ]
   ],
   "policy_decisions": []

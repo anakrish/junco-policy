@@ -42,7 +42,13 @@
       "P",
       "$6",
       "read",
-      "untrusted"
+      "trusted"
+    ],
+    [
+      "P",
+      "$6",
+      "read",
+      "private"
     ]
   ],
   "injection_success": null,
