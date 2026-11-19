@@ -665,6 +665,7 @@ impl RuleRuntime {
         }
     }
 
+    /// Public so hosts can drive bounded batches (Regorus HistoryStep).
     #[expect(
         clippy::collapsible_if,
         reason = "Pinned Verus does not support let-chain expressions"
@@ -673,7 +674,7 @@ impl RuleRuntime {
         requires resume_requires(*old(self), *bindings, *stored, target_len),
         ensures resume_ensures(*old(self), *final(self), result, *bindings, *stored, target_len),
     )]
-    pub(crate) fn resume_cursor(
+    pub fn resume_cursor(
         &mut self,
         bindings: &Bindings,
         stored: &StoredHistory,
@@ -733,6 +734,7 @@ impl RuleRuntime {
         }
     }
 
+    /// Public so hosts can drive bounded batches (Regorus HistoryStep).
     #[expect(
         clippy::too_many_arguments,
         reason = "Keep the locked history transaction inputs explicit."
@@ -743,7 +745,7 @@ impl RuleRuntime {
             *bindings, *stored, target_len, batch_size, result),
             result != Err(HistoryError::WrongHistoryOwner),
     )]
-    pub(crate) fn advance_cursor<L: Limits>(
+    pub fn advance_cursor<L: Limits>(
         &mut self,
         cursor: &mut BatchCursor,
         bindings: &Bindings,
