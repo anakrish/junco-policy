@@ -2449,7 +2449,8 @@ impl RegexNormalize for RegexId {
 
     #[verus_verify]
     #[cfg_attr(verus_keep_ghost, verifier::spinoff_prover)]
-    #[cfg_attr(verus_keep_ghost, verifier::rlimit(80))]
+    // rlimit 80 was exceeded when Regorus verifies this crate under its `history` feature set.
+    #[cfg_attr(verus_keep_ghost, verifier::rlimit(160))]
     fn set<G: KernelStore>(
         store: &mut G,
         children: &[Self],
