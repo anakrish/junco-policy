@@ -187,16 +187,16 @@ count the client theorems only):
 
 | Configuration (`cargo verus verify --locked ...`) | Verified, errors |
 |---|---|
-| `-p history-syntax --no-default-features` | 60, 0 |
-| `-p history-syntax --features serde,std` | 60, 0 |
-| `-p junco-core --no-default-features` | 204, 0 |
-| `-p junco-core --features runtime,std,serde` | 288, 0 |
-| `-p history-store --no-default-features --features runtime` | 289, 0 |
-| `-p history-store --features runtime,std` | 289, 0 |
+| `-p history-syntax --no-default-features` | 72, 0 |
+| `-p history-syntax --features serde,std` | 72, 0 |
+| `-p junco-core --no-default-features` | 211, 0 |
+| `-p junco-core --features runtime,std,serde` | 301, 0 |
+| `-p history-store --no-default-features --features runtime` | 297, 0 |
+| `-p history-store --features runtime,std` | 297, 0 |
 | `-p history-semantics --no-default-features --features runtime` | 1618, 0 |
 | `-p history-semantics --features runtime,std,cache` | 1623, 0 |
 | `-p history-semantics --features runtime,std,cache --test public_specs` | 19, 0 |
 | `-p history-semantics --features runtime,std,cache --test reviewer` | 9, 0 |
-| `-p history-analysis --no-default-features --features runtime` | 601, 0 |
-| `-p history-analysis --no-default-features --features runtime,std` | 601, 0 |
+| `-p history-analysis --no-default-features --features runtime` | 620, 0 |
+| `-p history-analysis --no-default-features --features runtime,std` | 620, 0 |
 | `-p history-analysis --no-default-features --features runtime,std --test reviewer` | 18, 0 |

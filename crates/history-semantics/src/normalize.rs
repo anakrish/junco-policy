@@ -4217,6 +4217,8 @@ impl Action {
     }
 
     #[verus_verify]
+    // The default rlimit was exceeded in the no-std configuration once `KeyHash`/`KeyedMap` specs were verified.
+    #[cfg_attr(verus_keep_ghost, verifier::rlimit(30))]
     #[verus_spec(result =>
         requires model::graph_wf(old(store).graph()), old(store).valid_store(),
             transition_configuration_valid(old(store).graph(), transition_action_views(old(tasks).view()), old(values).view()),
