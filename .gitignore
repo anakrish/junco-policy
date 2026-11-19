@@ -13,3 +13,4 @@
 /benches/agentdojo/runs/*
 !/benches/agentdojo/runs/replay-readers-timed-events/
 !/benches/agentdojo/runs/replay-events-4ary/
+__pycache__/
