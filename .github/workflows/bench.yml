@@ -1,0 +1,59 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One Pages deployment at a time; a newer push replaces a queued run, never a running one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    name: Criterion benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.1
+      # Both workspaces write here, so Criterion's report/index.html lists every benchmark.
+      CRITERION_HOME: ${{ github.workspace }}/criterion
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Rust 1.98.1
+        run: rustup toolchain install 1.98.1 --profile minimal
+
+      - name: Run benchmarks
+        # Not run: `agentdojo` (needs the AgentDojo Python environment and model access; not
+        # Criterion) and the fuzz `other` target (needs a patched VeriMon build).
+        run: |
+          cargo bench --locked --bench validator --bench progress --bench smt --bench resharp
+          cargo bench --locked --manifest-path fuzz/Cargo.toml --bench lock_policy --bench lock
+          echo '<meta http-equiv="refresh" content="0; url=report/">' > "$CRITERION_HOME/index.html"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: criterion
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: bench
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -354,6 +354,11 @@ With Cargo's default target directories, Criterion reports are under
 the root benchmarks. The fuzz benchmark's HTML entry point is
 `fuzz/target/criterion/report/index.html`.
 
+On every push to `main`, the `Benchmarks` workflow (`.github/workflows/bench.yml`) runs the
+Criterion benchmarks of both manifests except `agentdojo` and `other`, and publishes the combined
+HTML report to the repository's GitHub Pages site. Shared runners are noisy; compare points
+within one run rather than across runs.
+
 ### AgentDojo CaMeL harness
 
 `benches/agentdojo` runs AgentDojo v1.2 environments and scoring through a Python JSON
