@@ -17,6 +17,11 @@ cargo +1.98.1 bench --manifest-path fuzz/Cargo.toml --bench other -- 'dogwood_fu
 
 Junco retains its compiled policy/store with fresh histories; Dogwood re-lowers and rebuilds each authorizer outside timing because it consumes the policy set and has no reset. Timed routines include ingestion and teardown. Events are prebuilt: a request decides; only grants add a response visible to temporal predicates. Timestamps advance by one second, inside the 24h window. No warm Dogwood single-decision probe exists: every call appends; `../lock_policy.rs` covers junco's warm decisions.
 
+All Dogwood workloads and preflights use `InMemoryTemporalEngine::new().slice_leaves()`.
+This skips temporal leaves irrelevant to the current decision; selected leaves still
+interpret history rather than maintaining incremental state. Results use this opt-in
+configuration, not the unsliced default.
+
 | Junco rule | Dogwood `@id` |
 | --- | --- |
 | edit × owned_by_other | edit_owned_by_other |
@@ -26,6 +31,12 @@ Junco retains its compiled policy/store with fresh histories; Dogwood re-lowers 
 | remove × stale_view | remove_stale_view |
 | edit × read_by_other | edit_read_by_other |
 | remove × read_by_other | remove_read_by_other |
+
+## Refund approval and cache pressure
+
+The standalone [refund-stream benchmarks](../refunds/README.md) compare new
+approved refunds after abandoned transactions. They do not need VeriMon.
+The README documents the workload, timing boundaries, controls and measured results.
 
 ## Vendored data
 

@@ -53,8 +53,8 @@ use criterion::{
     criterion_main,
 };
 use dogwood_language::{
-    Authorizer, Event, ParsedPolicySet, PolicySchema, ProviderDeclarations, ServiceSchema,
-    Validator, parse_trace,
+    Authorizer, Event, InMemoryTemporalEngine, ParsedPolicySet, PolicySchema, ProviderDeclarations,
+    ServiceSchema, Validator, parse_trace,
 };
 use history_store::{History, Store};
 use junco_policy::{Action, LockEvent, LockPolicy};
@@ -233,7 +233,10 @@ impl Dogwood {
     }
 
     fn authorizer(&self) -> Authorizer {
-        Authorizer::new(self.parsed.lower(&self.schema).expect("policy lowers"))
+        Authorizer::builder(self.parsed.lower(&self.schema).expect("policy lowers"))
+            .temporal_engine(InMemoryTemporalEngine::new().slice_leaves())
+            .build()
+            .expect("authorizer builds")
     }
 }
 
