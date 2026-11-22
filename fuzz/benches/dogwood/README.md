@@ -38,6 +38,10 @@ The standalone [refund-stream benchmarks](../refunds/README.md) compare new
 approved refunds after abandoned transactions. They do not need VeriMon.
 The README documents the workload, timing boundaries, controls and measured results.
 
+The separate [binding-churn benchmarks](../binding-churn/README.md) revisit fixed
+working sets at and above Junco's cursor-cache capacity. They include timing
+tables and do not need VeriMon.
+
 ## Vendored data
 
 Source: [Dogwood](https://github.com/dogwood-policy/dogwood/tree/4ec5e2c01b44ff3882a231ae5d315b330b38fa25), commit `4ec5e2c01b44ff3882a231ae5d315b330b38fa25`; interpreter crate `dogwood-language 1.1.0` with default features. `examples/LICENSE` and `examples/NOTICE` are Dogwood's, Apache-2.0, © Amazon.com, Inc. or its affiliates.
