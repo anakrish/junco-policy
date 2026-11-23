@@ -2,16 +2,17 @@ name: Benchmarks
 
 on:
   push:
-    branches: [main]
+    branches: [bench/dogwood-outperforms-junco]
+  pull_request:
+    branches: [bench/dogwood-outperforms-junco]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# One Pages deployment at a time; a newer push replaces a queued run, never a running one.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('bench-pr-{0}', github.event.pull_request.number) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   bench:
@@ -20,23 +21,27 @@ jobs:
     timeout-minutes: 180
     env:
       RUSTUP_TOOLCHAIN: 1.98.1
-      # Both workspaces write here, so Criterion's report/index.html lists every benchmark.
       CRITERION_HOME: ${{ github.workspace }}/criterion
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Rust 1.98.1
         run: rustup toolchain install 1.98.1 --profile minimal
 
-      - name: Run benchmarks
-        # Not run: `agentdojo` (needs the AgentDojo Python environment and model access; not
-        # Criterion) and the fuzz `other` target (needs a patched VeriMon build).
+      - name: Test comparison renderer
+        run: python3 -B -m unittest discover -s scripts -p test_dogwood_bench_page.py
+
+      - name: Compare decision latency
         run: |
-          cargo bench --locked --bench validator --bench progress --bench smt --bench resharp
-          cargo bench --locked --manifest-path fuzz/Cargo.toml --bench lock_policy --bench lock
-          echo '<meta http-equiv="refresh" content="0; url=report/">' > "$CRITERION_HOME/index.html"
+          rustc -Vv
+          LC_ALL=C lscpu | grep 'Model name:'
+          mkdir "$CRITERION_HOME"
+          cargo bench --locked --no-fail-fast --manifest-path fuzz/Cargo.toml --bench refunds --bench binding_churn
+          python3 scripts/dogwood_bench_page.py "$CRITERION_HOME"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
@@ -46,6 +51,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: bench
+    if: github.repository == 'anakrish/junco-policy' && github.ref == 'refs/heads/bench/dogwood-outperforms-junco' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -338,6 +338,32 @@ equal events before minterm classification to avoid extra work on repeated event
 
 ### Run the benchmarks
 
+The [Junco vs. Dogwood decision-latency report](https://anakrish.github.io/junco-policy/)
+is published from `bench/dogwood-outperforms-junco` on Anand’s fork after Pages is configured.
+To reproduce the refund and binding-churn tables and their Criterion plots from a single run:
+
+```sh
+export CRITERION_HOME="$(mktemp -d)"
+cargo bench --locked --no-fail-fast --manifest-path fuzz/Cargo.toml --bench refunds --bench binding_churn
+python3 scripts/dogwood_bench_page.py "$CRITERION_HOME"
+# Open $CRITERION_HOME/index.html
+```
+
+PRs targeting that branch upload the `github-pages` review artifact; they do not deploy.
+Download it from the successful workflow run and extract `artifact.tar` to view `index.html`.
+Shared runners are noisy: compare engines within one run.
+
+**One-time setup on `anakrish/junco-policy`:** enable Actions if needed, then select
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Under **Settings → Environments → github-pages → Deployment branches and tags**, choose
+**Selected branches and tags** and allow only the branch `bench/dogwood-outperforms-junco`.
+This prevents the inherited workflow on `main` from overwriting the site. A push to the
+publishing branch (or a manual `Benchmarks` run on it) deploys the report.
+See [Pages setup](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow)
+and [fork PR approval](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/approve-runs-from-forks).
+
+Other local benchmarks:
+
 ```sh
 cargo bench --manifest-path fuzz/Cargo.toml --bench lock_policy
 cargo bench --manifest-path fuzz/Cargo.toml --bench other
@@ -358,11 +384,6 @@ With Cargo's default target directories, Criterion reports are under
 `fuzz/target/criterion/` for the fuzz-manifest benchmark and `target/criterion/` for
 the root benchmarks. The fuzz benchmark's HTML entry point is
 `fuzz/target/criterion/report/index.html`.
-
-On every push to `main`, the `Benchmarks` workflow (`.github/workflows/bench.yml`) runs the
-Criterion benchmarks of both manifests except `agentdojo` and `other`, and publishes the combined
-HTML report to the repository's GitHub Pages site. Shared runners are noisy; compare points
-within one run rather than across runs.
 
 ### AgentDojo CaMeL harness
 
