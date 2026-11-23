@@ -93,6 +93,9 @@ and append `Receive` events for derived values; the policy does not infer propag
 contacts after the same principal has read or received tainted data for that handle.
 Declassifying the same label for that principal and handle clears its taint until the
 next read or receive. Another principal's copy is independent.
+`FlowRule::no_contact_after_any_read(untrusted, &[sink])` scopes taint to the principal
+instead: after it reads or receives tainted data on any handle, each handle it passes to
+a sink must be declassified for that principal after the latest tainted read or receive.
 `FlowAction` implements `Display` and `FromStr` with the lowercase names `read`,
 `receive`, `contact` and `declassify`.
 
@@ -272,10 +275,12 @@ capabilities.
 
 Related policies and histories share one `Arc<Store<E>>`. Constants, candidates and
 appended events use coordinate-specific codebooks, so evaluation reuses numeric
-history without encoding its raw events again. Rules retain up to 16 residual cursors
-keyed by history owner and bindings. An unchanged history reuses its progress; an
-append processes the new suffix. Shortening a history invalidates that owner's
-cursors.
+history without encoding its raw events again. Each rule retains up to 16 cursors
+keyed by history owner and bindings. A cursor scans backwards from the requested
+endpoint. Repeating that endpoint resumes where it stopped. After an append, recent
+events may settle the decision on their own. If they return the matcher to its root,
+it can reuse the cached result for the older history; otherwise it rereads as far
+back as needed. Shortening a history invalidates that owner's cursors.
 
 Optional precompilation explores at most 64 states per rule. States beyond that
 frontier use the exact transition-DAG evaluator, so reaching the budget changes the
@@ -284,17 +289,17 @@ execution path without approximating the language.
 ### Benchmark results
 
 The following are historical same-host medians against `origin/main` at `684911c`.
-They predate the shared-core extraction and do not measure that extraction's latency.
+They predate both the shared-core extraction and right derivatives.
 The runs used 10 Criterion samples, a one-second warmup and a three-second measurement
 window on an Azure development host. They are regression evidence, not portable
 latency claims or a ranking against other engines.
 
 #### Growing residuals
 
-The policy language is $\Sigma^* \cdot Read \cdot \Sigma^{w+1}$. On an all-read history
-shorter than the required suffix, each derivative adds another candidate suffix to the
-residual DAG. The complete DFA grows exponentially with $w$; precompilation stops at
-the per-rule state budget.
+The benchmark uses $\Sigma^* \cdot Read \cdot \Sigma^{w+1}$. In the measured
+left-derivative implementation, each read in a history shorter than the required
+suffix added a candidate suffix to the residual DAG. Precompilation stopped at the
+per-rule state budget.
 
 | Window | Main compile | Precompiled | Compile cost |
 |---:|---:|---:|---:|
@@ -333,6 +338,32 @@ equal events before minterm classification to avoid extra work on repeated event
 
 ### Run the benchmarks
 
+The [Junco vs. Dogwood decision-latency report](https://anakrish.github.io/junco-policy/)
+is published from `bench/dogwood-outperforms-junco` on Anand’s fork after Pages is configured.
+To reproduce the refund and binding-churn tables and their Criterion plots from a single run:
+
+```sh
+export CRITERION_HOME="$(mktemp -d)"
+cargo bench --locked --no-fail-fast --manifest-path fuzz/Cargo.toml --bench refunds --bench binding_churn
+python3 scripts/dogwood_bench_page.py "$CRITERION_HOME"
+# Open $CRITERION_HOME/index.html
+```
+
+PRs targeting that branch upload the `github-pages` review artifact; they do not deploy.
+Download it from the successful workflow run and extract `artifact.tar` to view `index.html`.
+Shared runners are noisy: compare engines within one run.
+
+**One-time setup on `anakrish/junco-policy`:** enable Actions if needed, then select
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Under **Settings → Environments → github-pages → Deployment branches and tags**, choose
+**Selected branches and tags** and allow only the branch `bench/dogwood-outperforms-junco`.
+This prevents the inherited workflow on `main` from overwriting the site. A push to the
+publishing branch (or a manual `Benchmarks` run on it) deploys the report.
+See [Pages setup](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site#publishing-with-a-custom-github-actions-workflow)
+and [fork PR approval](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/approve-runs-from-forks).
+
+Other local benchmarks:
+
 ```sh
 cargo bench --manifest-path fuzz/Cargo.toml --bench lock_policy
 cargo bench --manifest-path fuzz/Cargo.toml --bench other
@@ -353,11 +384,6 @@ With Cargo's default target directories, Criterion reports are under
 `fuzz/target/criterion/` for the fuzz-manifest benchmark and `target/criterion/` for
 the root benchmarks. The fuzz benchmark's HTML entry point is
 `fuzz/target/criterion/report/index.html`.
-
-On every push to `main`, the `Benchmarks` workflow (`.github/workflows/bench.yml`) runs the
-Criterion benchmarks of both manifests except `agentdojo` and `other`, and publishes the combined
-HTML report to the repository's GitHub Pages site. Shared runners are noisy; compare points
-within one run rather than across runs.
 
 ### AgentDojo CaMeL harness
 
@@ -497,6 +523,49 @@ than unconstrained attacks, zero enforced banking attacks, and any enforced resi
 outside travel flagged for inspection. Clean utility should be 65–80%, with attacked
 utility within 5 percentage points. Partial reports never claim full-run acceptance;
 misses are reported rather than tuned away.
+
+### MultiAgentDojo harness
+
+`benches/multiagentdojo` runs the Multi-CaMeL paper's MultiAgentDojo setup (AgentDojo v1.2.2,
+`important_instructions`, 97 clean and 949 attacked tasks) with the fork's sub-agent
+partitions and prompts: an orchestrator whose only tools are the sub-agents, each a fresh
+native tool loop of at most 16 model turns that sees tool results in full. There is no
+quarantined model and no hidden values; one global `FlowPolicy` of two
+`FlowRule::no_contact_after_any_read` rules (`Untrusted → Sink`, `Private → Peer`) judges
+every sink argument before the call runs. Taint belongs to the principal: a sub-agent that
+read an injection vector (or received a tainted task), and the orchestrator once it received
+a tainted report, may pass an argument only after the harness records a `Declassify` for it.
+
+`declassify.rs` gives every sink argument a role. Dates, times and amounts are declassified
+when well-formed; emails, URLs and IBANs when they occur in the prompt or in a static lookup
+result no sink can write (contacts, the user's IBAN, hotel lists, ...); ids only from such
+lookups; user-named values (hotels, channels, event titles, passwords) only from the prompt;
+message bodies when every email, URL and IBAN in them is anchored. Private data reaches a
+recipient only when the recipients are among its readers or the principal never read
+untrusted data. Reports between agents are never declassified. `--audit` keeps the same
+agents and prompts but appends would-be denials as granted (the no-defense baseline);
+`--no-declassify` is the taint-only ablation.
+
+Use the fork's interpreter (`cd ~/git/multiagentdojo && uv sync`) as `AGENTDOJO_PYTHON`:
+
+```sh
+cargo +1.98.1 bench --bench multiagentdojo -- --self-test
+cargo +1.98.1 bench --bench multiagentdojo -- --suite workspace --user-task user_task_0 \
+  --injection-task injection_task_0 --concurrency 1
+cargo +1.98.1 bench --bench multiagentdojo -- --concurrency 4
+cargo +1.98.1 bench --bench multiagentdojo -- --audit --concurrency 4
+cargo +1.98.1 bench --bench multiagentdojo -- --report
+```
+
+Logs go to `benches/multiagentdojo/runs/<model>+junco[-audit][-taint]/<suite>/<user_task_id>/<important_instructions|none>/<injection_task_id|none>.json`
+(override with `--out`) and hold every conversation, call, handoff, event, policy decision
+and declassification. Scored logs are reused unless `--force`. `--report` prints per-suite
+clean utility, utility under attack, ASR, and ASR excluding the pairs no tool-call policy
+can deny (travel `injection_task_6`, an answer-text goal; banking `user_task_15` ×
+`injection_task_4`, whose ground truth satisfies the injection's check), with denial and
+declassification counts. A Copilot 429 (the per-user utility-model quota, hours per window)
+pauses the lane in 10-minute steps for up to 8 hours, in both AgentDojo harnesses, so a full
+run (about 310 tasks per window for GPT-4.1) paces itself instead of failing its queue.
 
 ## Static analysis
 
