@@ -16,104 +16,45 @@ use std::time::{Duration, Instant};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use history_semantics::Validator;
 use history_store::{Checkpoint, Store};
-use history_syntax::{
-    AtomPattern, Comparison, Component, ComponentPattern, Head, RegexExpr, Rule, RuleMode, TestExpr,
-};
+use history_syntax::Rule;
 use junco_core::Request;
-use junco_policy::{Action, LockComponent, LockEvent};
+use junco_policy::{Action, LockEvent};
 use std::sync::Arc;
+mod facts;
 
 const HISTORY_LENGTHS: [usize; 4] = [16, 4096, 8192, 16384];
 
 /// Benchmark principal identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Actor(u32);
+pub(crate) struct Actor(pub(crate) u32);
 
 /// Benchmark resource identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Path(u32);
+pub(crate) struct Path(pub(crate) u32);
 
 const ALICE: Actor = Actor(0);
 const BOB: Actor = Actor(1);
 const RESOURCE: Path = Path(0);
 const OTHER_RESOURCE: Path = Path(1);
 
-fn principal_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(Component(0), ComponentPattern::variable("actor")),
-    )
-}
-
-fn resource_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(Component(2), ComponentPattern::variable("resource")),
-    )
-}
-
-fn action_is(action: Action, comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(action)),
-        ),
-    )
-}
-
-fn release_head() -> Head<LockEvent<Actor, Path>> {
-    Head::new([
-        ComponentPattern::variable("actor"),
-        ComponentPattern::constant(LockComponent::Action(Action::Release)),
-        ComponentPattern::variable("resource"),
-    ])
-}
-
 /// `All · Test(principal = actor ∧ action = Edit ∧ resource = resource) · All`.
-fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
-    let matching_edit = TestExpr::and([
-        principal_is(Comparison::Eq),
-        action_is(Action::Edit, Comparison::Eq),
-        resource_is(Comparison::Eq),
-    ]);
-    Rule::new(
-        RuleMode::Require,
-        release_head(),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(matching_edit),
-            RegexExpr::all(),
-        ]),
+pub(crate) fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
+    facts::rules(
+        include_str!("facts/progress_prior.facts"),
+        &facts::LockSchema(Actor, Path),
     )
+    .pop()
+    .unwrap()
 }
 
 /// `All · Edit(r) · NonEdit(r)* · Approval(r, principal ≠ actor) · NonEdit(r)*`.
-fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
-    let edit = TestExpr::and([
-        resource_is(Comparison::Eq),
-        action_is(Action::Edit, Comparison::Eq),
-    ]);
-    let non_edit = TestExpr::or([
-        resource_is(Comparison::Neq),
-        action_is(Action::Edit, Comparison::Neq),
-    ]);
-    let approval = TestExpr::and([
-        resource_is(Comparison::Eq),
-        action_is(Action::Remove, Comparison::Eq),
-        principal_is(Comparison::Neq),
-    ]);
-    Rule::new(
-        RuleMode::Require,
-        release_head(),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(edit),
-            RegexExpr::star(RegexExpr::test(non_edit.clone())),
-            RegexExpr::test(approval),
-            RegexExpr::star(RegexExpr::test(non_edit)),
-        ]),
+pub(crate) fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
+    facts::rules(
+        include_str!("facts/release_approval.facts"),
+        &facts::LockSchema(Actor, Path),
     )
+    .pop()
+    .unwrap()
 }
 
 /// Alice reads throughout, with her matching edit at the midpoint.

@@ -1,0 +1,17 @@
+language junco.facts.v1;
+package benchmark.camel;
+schema flow;
+history tainted(p: principal, v: handle, source: label) if {
+    since e in history {
+        e.principal == p; e.handle == v; e.label == source;
+        e.action == action.read or e.action == action.receive;
+    } unless {
+        e.principal == p; e.handle == v; e.label == source; e.action == action.declassify;
+    };
+}
+policy contacts ordered {
+    forbid untrusted_sink on {principal: p, handle: v, action: action.contact, label: label.sink}
+    if { tainted(p, v, label.untrusted); } report flow.untrusted_sink;
+    forbid private_peer on {principal: p, handle: v, action: action.contact, label: label.peer}
+    if { tainted(p, v, label.private); } report flow.private_peer;
+}

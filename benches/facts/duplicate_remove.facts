@@ -1,0 +1,8 @@
+language junco.facts.v1;
+package benchmark.removal;
+schema lock;
+policy removals ordered {
+    forbid duplicate on {principal: actor, action: action.remove, resource: target}
+    if { exists e in history { e.action == action.remove; e.resource == target; }; }
+    report benchmark.rule;
+}

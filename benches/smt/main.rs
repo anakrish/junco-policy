@@ -11,8 +11,10 @@ use criterion::{BenchmarkId, Criterion, SamplingMode, criterion_group, criterion
 use history_analysis::{Components, Domains, Inclusion, PolicyAnalyzer, Value};
 use history_semantics::CompiledRule;
 use history_store::{History, Store};
-use history_syntax::{Component, Component3, ComponentPattern, Head, Rule, RuleMode};
+use history_syntax::{Component, Component3};
 
+#[path = "../facts/mod.rs"]
+mod facts;
 mod regexlib_subset;
 
 use regexlib_subset::{ALPHABET, Char, INSTANCES};
@@ -36,11 +38,6 @@ fn concrete(components: &Components<Char>) -> Char {
 /// Times `tail_included`; the head, analyzer and regexes are built outside the timed call.
 fn benchmark_regexlib_subset(criterion: &mut Criterion) {
     // These tails have no variables, so any inhabited candidate head gives the same inclusion.
-    let head = Head::<Char>::new([
-        ComponentPattern::constant(Component3::C0(())),
-        ComponentPattern::constant(Component3::C1(ALPHABET[0])),
-        ComponentPattern::constant(Component3::C2(())),
-    ]);
     let mut group = criterion.benchmark_group("regexlib_subset");
     group
         .sampling_mode(SamplingMode::Flat)
@@ -49,7 +46,11 @@ fn benchmark_regexlib_subset(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(2));
     let mut checked_counterexamples = 0usize;
     for instance in &INSTANCES {
-        let (left, right) = ((instance.left)(), (instance.right)());
+        let left_source = regexlib_subset::source((instance.left)());
+        let right_source = regexlib_subset::source((instance.right)());
+        let head = left_source.head.clone();
+        assert_eq!(head, right_source.head);
+        let (left, right) = (&left_source.tail, &right_source.tail);
         let mut analyzer = PolicyAnalyzer::new(
             Domains::<Char>::infinite()
                 .with_domain(Component(0), &[Component3::C0(())])
@@ -87,16 +88,11 @@ fn benchmark_regexlib_subset(criterion: &mut Criterion) {
                                 Arc::new(Store::<Char>::new().expect("concrete validation store"));
                             let history =
                                 History::new(store.clone()).expect("concrete validation history");
-                            let left_matcher = CompiledRule::new(
-                                store.clone(),
-                                Rule::new(RuleMode::Forbid, head.clone(), left.clone()),
-                            )
-                            .expect("left concrete matcher");
-                            let right_matcher = CompiledRule::new(
-                                store,
-                                Rule::new(RuleMode::Forbid, head.clone(), right.clone()),
-                            )
-                            .expect("right concrete matcher");
+                            let left_matcher =
+                                CompiledRule::new(store.clone(), left_source.clone())
+                                    .expect("left concrete matcher");
+                            let right_matcher = CompiledRule::new(store, right_source.clone())
+                                .expect("right concrete matcher");
                             (history, left_matcher, right_matcher)
                         });
                     history.truncate(0).expect("reset concrete history");

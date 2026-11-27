@@ -1,10 +1,9 @@
 //! Translates standard regex syntax (parsed by `regex_syntax` in byte mode) into
-//! `history_syntax` regexes over `Symbol` events, one byte per event.
+//! Facts algebra text over `Symbol` events, one byte per event.
 
-use history_syntax::{
-    AtomPattern, Comparison, Component, Component3, ComponentPattern, Event, N3, RegexExpr,
-    TestExpr,
-};
+use crate::facts::Algebra as RegexText;
+use history_facts::Schema;
+use history_syntax::{Component3, Event, N3};
 use regex_syntax::hir::{Class, Hir, HirKind, Look};
 
 /// One haystack byte as an open-domain resource, or the candidate triggering the rule.
@@ -50,7 +49,7 @@ pub enum Edge {
 }
 
 pub struct Translated {
-    pub regex: RegexExpr<Symbol>,
+    pub regex: RegexText,
     pub left: Edge,
     pub right: Edge,
 }
@@ -85,103 +84,101 @@ pub fn translate(pattern: &str) -> Translated {
         items = &items[..items.len() - 1];
     }
     Translated {
-        regex: RegexExpr::concat(items.iter().map(|hir| emit(hir, pattern))),
+        regex: RegexText::concat(items.iter().map(|hir| emit(hir, pattern))),
         left,
         right,
     }
 }
 
-pub fn plain(pattern: &str) -> RegexExpr<Symbol> {
+pub fn plain(pattern: &str) -> RegexText {
     let translated = translate(pattern);
     assert_eq!(translated.left, Edge::Open, "{pattern}");
     assert_eq!(translated.right, Edge::Open, "{pattern}");
     translated.regex
 }
 
-pub fn contains(regex: RegexExpr<Symbol>) -> RegexExpr<Symbol> {
-    RegexExpr::concat([RegexExpr::all(), regex, RegexExpr::all()])
+pub fn contains(regex: RegexText) -> RegexText {
+    RegexText::concat([RegexText::all(), regex, RegexText::all()])
 }
 
-pub fn tail(translated: Translated) -> RegexExpr<Symbol> {
+pub fn tail(translated: Translated) -> RegexText {
     let non_word = || class((0..=255u8).filter(|b| !(b.is_ascii_alphanumeric() || *b == b'_')));
     let left = match translated.left {
-        Edge::Open => RegexExpr::all(),
-        Edge::Anchored => RegexExpr::epsilon(),
-        Edge::Word => RegexExpr::union([
-            RegexExpr::epsilon(),
-            RegexExpr::concat([RegexExpr::all(), non_word()]),
+        Edge::Open => RegexText::all(),
+        Edge::Anchored => RegexText::epsilon(),
+        Edge::Word => RegexText::union([
+            RegexText::epsilon(),
+            RegexText::concat([RegexText::all(), non_word()]),
         ]),
     };
     let right = match translated.right {
-        Edge::Open => RegexExpr::all(),
-        Edge::Anchored => RegexExpr::epsilon(),
-        Edge::Word => RegexExpr::union([
-            RegexExpr::epsilon(),
-            RegexExpr::concat([non_word(), RegexExpr::all()]),
+        Edge::Open => RegexText::all(),
+        Edge::Anchored => RegexText::epsilon(),
+        Edge::Word => RegexText::union([
+            RegexText::epsilon(),
+            RegexText::concat([non_word(), RegexText::all()]),
         ]),
     };
-    RegexExpr::concat([left, translated.regex, right])
+    RegexText::concat([left, translated.regex, right])
 }
 
-pub fn class(members: impl IntoIterator<Item = u8>) -> RegexExpr<Symbol> {
+pub fn class(members: impl IntoIterator<Item = u8>) -> RegexText {
     let mut table = [false; 256];
     for byte in members {
         table[usize::from(byte)] = true;
     }
     let count = table.iter().filter(|&&member| member).count();
-    let atom = |comparison, byte| {
-        TestExpr::atom(
-            comparison,
-            AtomPattern::new(
-                Component(2),
-                ComponentPattern::constant(Component3::C2(Symbol::Byte(byte))),
-            ),
-        )
-    };
+    let atom = |comparison: &str, byte| format!("e.resource {comparison} byte.v{byte}");
     match count {
-        0 => RegexExpr::empty(),
-        256 => RegexExpr::test(TestExpr::true_test()),
-        1 => RegexExpr::test(atom(
-            Comparison::Eq,
-            (0..=255u8).find(|&b| table[usize::from(b)]).unwrap(),
+        0 => RegexText::empty(),
+        256 => RegexText::event("true;"),
+        1 => RegexText::event(&format!(
+            "{};",
+            atom("==", (0..=255u8).find(|&b| table[usize::from(b)]).unwrap(),)
         )),
-        2..=128 => RegexExpr::test(TestExpr::or(
+        2..=128 => RegexText::event(&format!(
+            "{};",
             (0..=255u8)
                 .filter(|&b| table[usize::from(b)])
-                .map(|b| atom(Comparison::Eq, b)),
+                .map(|b| atom("==", b))
+                .collect::<Vec<_>>()
+                .join(" or ")
         )),
-        _ => RegexExpr::test(TestExpr::and(
+        _ => RegexText::event(&format!(
+            "{};",
             (0..=255u8)
                 .filter(|&b| !table[usize::from(b)])
-                .map(|b| atom(Comparison::Neq, b)),
+                .map(|b| atom("!=", b))
+                .collect::<Vec<_>>()
+                .join(" and ")
         )),
     }
 }
 
-pub fn literal(bytes: &[u8]) -> RegexExpr<Symbol> {
-    RegexExpr::concat(bytes.iter().map(|&byte| class([byte])))
+pub fn literal(bytes: &[u8]) -> RegexText {
+    RegexText::concat(bytes.iter().map(|&byte| class([byte])))
 }
 
-fn repeat(regex: RegexExpr<Symbol>, lo: u32, hi: Option<u32>) -> RegexExpr<Symbol> {
+fn repeat(regex: RegexText, lo: u32, hi: Option<u32>) -> RegexText {
     let tail = match hi {
-        None => Some(RegexExpr::star(regex.clone())),
+        None => Some(RegexText::star(regex.clone())),
         Some(hi) => {
-            let mut tail = RegexExpr::epsilon();
+            let mut tail = RegexText::epsilon();
             for _ in lo..hi {
-                tail = RegexExpr::union([
-                    RegexExpr::epsilon(),
-                    RegexExpr::concat([regex.clone(), tail]),
+                tail = RegexText::union([
+                    RegexText::epsilon(),
+                    RegexText::concat([regex.clone(), tail]),
                 ]);
             }
             (lo < hi).then_some(tail)
         }
     };
-    RegexExpr::concat((0..lo).map(|_| regex.clone()).chain(tail))
+    RegexText::concat((0..lo).map(|_| regex.clone()).chain(tail))
 }
 
-fn emit(hir: &Hir, pattern: &str) -> RegexExpr<Symbol> {
+fn emit(hir: &Hir, pattern: &str) -> RegexText {
     match hir.kind() {
-        HirKind::Empty => RegexExpr::epsilon(),
+        HirKind::Empty => RegexText::epsilon(),
         HirKind::Literal(lit) => literal(&lit.0),
         HirKind::Class(Class::Bytes(bytes)) => class(
             bytes
@@ -192,8 +189,33 @@ fn emit(hir: &Hir, pattern: &str) -> RegexExpr<Symbol> {
         HirKind::Class(Class::Unicode(_)) => unreachable!("byte mode yields byte classes"),
         HirKind::Repetition(rep) => repeat(emit(&rep.sub, pattern), rep.min, rep.max),
         HirKind::Capture(capture) => emit(&capture.sub, pattern),
-        HirKind::Alternation(items) => RegexExpr::union(items.iter().map(|hir| emit(hir, pattern))),
-        HirKind::Concat(items) => RegexExpr::concat(items.iter().map(|hir| emit(hir, pattern))),
+        HirKind::Alternation(items) => RegexText::union(items.iter().map(|hir| emit(hir, pattern))),
+        HirKind::Concat(items) => RegexText::concat(items.iter().map(|hir| emit(hir, pattern))),
         HirKind::Look(_) => panic!("unsupported look inside {pattern}"),
+    }
+}
+
+pub struct SymbolSchema;
+impl Schema<Symbol> for SymbolSchema {
+    fn name(&self) -> &str {
+        "bytes"
+    }
+    fn field(&self, name: &str) -> Option<usize> {
+        match name {
+            "principal" => Some(0),
+            "action" => Some(1),
+            "resource" => Some(2),
+            _ => None,
+        }
+    }
+    fn constant(&self, name: &str) -> Option<Component3<(), (), Symbol>> {
+        if name == "resource.candidate" {
+            return Some(Component3::C2(Symbol::Candidate));
+        }
+        let byte = name.strip_prefix("byte.v")?.parse::<u8>().ok()?;
+        Some(Component3::C2(Symbol::Byte(byte)))
+    }
+    fn diagnostic(&self, name: &str) -> bool {
+        name == "benchmark.rule"
     }
 }

@@ -1,0 +1,14 @@
+language junco.facts.v1;
+package benchmark.terminal;
+schema lock;
+policy releases ordered {
+    require obligation on {principal: actor, action: action.release, resource: target}
+    if {
+        algebra {
+            all;
+            event e { e.principal == actor; e.action == action.edit; e.resource == target; };
+            concat count.2;
+        };
+    }
+    report benchmark.rule;
+}

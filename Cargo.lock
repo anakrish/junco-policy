@@ -1145,6 +1145,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "history-analysis",
+ "history-facts",
  "history-semantics",
  "history-store",
  "history-syntax",

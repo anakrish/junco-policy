@@ -25,6 +25,7 @@ use junco_core::HistoryError;
 use junco_policy::{Action, LockEvent, LockPolicy};
 
 mod oracle;
+pub mod textual_benchmarks;
 
 pub use oracle::{Surprise, contended_events, no_surprise_violation};
 
@@ -107,9 +108,18 @@ pub fn granted_history(
     data: &[u8],
     length: usize,
 ) -> Result<History<LockEvent<Agent, PooledPath>>, PolicyError> {
-    let mut generator = TraceGenerator::new(data);
     let store = Arc::new(Store::new()?);
-    let mut policy = LockPolicy::new(Arc::clone(&store))?;
+    let policy = LockPolicy::new(Arc::clone(&store))?;
+    granted_history_with_policy(data, length, store, policy)
+}
+
+fn granted_history_with_policy(
+    data: &[u8],
+    length: usize,
+    store: Arc<Store<LockEvent<Agent, PooledPath>>>,
+    mut policy: LockPolicy<Agent, PooledPath>,
+) -> Result<History<LockEvent<Agent, PooledPath>>, PolicyError> {
+    let mut generator = TraceGenerator::new(data);
     let mut history = History::new(store)?;
     while history.len() < length {
         let Some(candidate) = generator.next_candidate() else {
@@ -144,9 +154,17 @@ pub fn probe_candidates() -> [(&'static str, LockEvent<Agent, PooledPath>); 4] {
 /// candidates are recorded only as denials: they leave history and the working-tree model untouched.
 /// Construction, evaluation and append failures are returned, never recorded as denials.
 pub fn validate_trace(data: &[u8]) -> Result<ValidatedTrace, PolicyError> {
-    let mut generator = TraceGenerator::new(data);
     let store = Arc::new(Store::new()?);
-    let mut policy = LockPolicy::new(Arc::clone(&store))?;
+    let policy = LockPolicy::new(Arc::clone(&store))?;
+    validate_trace_with_policy(data, store, policy)
+}
+
+fn validate_trace_with_policy(
+    data: &[u8],
+    store: Arc<Store<LockEvent<Agent, PooledPath>>>,
+    mut policy: LockPolicy<Agent, PooledPath>,
+) -> Result<ValidatedTrace, PolicyError> {
+    let mut generator = TraceGenerator::new(data);
     let mut trace = ValidatedTrace::new(store)?;
     for _ in 0..generator.step_budget() {
         let Some(candidate) = generator.next_candidate() else {

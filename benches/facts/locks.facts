@@ -1,0 +1,38 @@
+language junco.facts.v1;
+package benchmark.locks;
+schema lock;
+predicate foreign_edit(e: event, p: principal, r: resource) if {
+    e.resource == r; e.action == action.edit; e.principal != p;
+}
+predicate owner_change(e: event, r: resource) if {
+    e.resource == r;
+    e.action == action.edit or e.action == action.release or e.action == action.remove;
+}
+predicate refresh(e: event, p: principal, r: resource) if {
+    e.resource == r;
+    e.action == action.edit or e.action == action.remove or (e.action == action.read and e.principal == p);
+}
+predicate foreign_read(e: event, p: principal, r: resource) if {
+    e.resource == r; e.action == action.read; e.principal != p;
+}
+predicate reader_change(e: event, r: resource) if {
+    e.resource == r; e.action == action.read or e.action == action.remove;
+}
+history owner(p: principal, r: resource) if {
+    since e in history { foreign_edit(e, p, r); } unless { owner_change(e, r); };
+}
+history stale(p: principal, r: resource) if {
+    since e in history { foreign_edit(e, p, r); } unless { refresh(e, p, r); };
+}
+history reader(p: principal, r: resource) if {
+    since e in history { foreign_read(e, p, r); } unless { reader_change(e, r); };
+}
+policy locks ordered {
+    forbid owner_edit on {principal: p, action: action.edit, resource: r} if { owner(p, r); } report lock.owner;
+    forbid owner_release on {principal: p, action: action.release, resource: r} if { owner(p, r); } report lock.owner;
+    forbid owner_remove on {principal: p, action: action.remove, resource: r} if { owner(p, r); } report lock.owner;
+    forbid stale_edit on {principal: p, action: action.edit, resource: r} if { stale(p, r); } report lock.stale;
+    forbid stale_remove on {principal: p, action: action.remove, resource: r} if { stale(p, r); } report lock.stale;
+    forbid reader_edit on {principal: p, action: action.edit, resource: r} if { reader(p, r); } report lock.reader;
+    forbid reader_remove on {principal: p, action: action.remove, resource: r} if { reader(p, r); } report lock.reader;
+}

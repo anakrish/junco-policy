@@ -12,6 +12,11 @@ history DSL; its parser, host vocabulary and lowering are **not Verus-proved**.
 See its grammar, trust boundary and runnable prior-edit, ownership/freshness and
 information-flow/reset examples before using textual policies.
 
+Committed Junco benchmarks now author their policies in Facts, including generated
+full-history algebra for the regex/stress corpora. Parsing/lowering is outside
+the existing kernel timers; native diagnostics and comparison backends remain
+unchanged. See the [benchmark inventory and timing boundary](benches/facts/README.md).
+
 Check a proposed action against what has already happened. A rule can require a prior
 edit, forbid a stale write, or bind a decision to the principal and resource in the
 request. Retained policies compile once and reuse their progress as histories grow.

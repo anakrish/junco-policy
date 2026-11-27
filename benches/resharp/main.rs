@@ -10,11 +10,13 @@ use std::time::{Duration, Instant};
 use criterion::{Criterion, SamplingMode, Throughput, criterion_group};
 use history_semantics::Validator;
 use history_store::{Checkpoint, Store};
-use history_syntax::{Component3, ComponentPattern, Head, RegexExpr, Rule, RuleMode};
 use junco_core::Request;
 use resharp::{RegexOptions, UnicodeMode};
 
+#[path = "../facts/mod.rs"]
+mod facts;
 mod translate;
+use facts::Algebra as RegexText;
 
 use translate::{Symbol, class, contains, literal, plain, tail, translate};
 
@@ -74,7 +76,7 @@ fn popular_haystack() -> Arc<[u8]> {
 struct Workload {
     group: String,
     resharp: String,
-    junco: RegexExpr<Symbol>,
+    junco: RegexText,
     haystack: Arc<[u8]>,
 }
 
@@ -86,7 +88,7 @@ impl Workload {
     fn custom(
         group: impl Into<String>,
         resharp: &str,
-        junco: RegexExpr<Symbol>,
+        junco: RegexText,
         haystack: Arc<[u8]>,
     ) -> Self {
         Self {
@@ -108,24 +110,20 @@ fn resharp_regex(pattern: &str) -> resharp::Regex {
     .expect(pattern)
 }
 
-fn candidate_head() -> Head<Symbol> {
-    Head::new([
-        ComponentPattern::variable("P"),
-        ComponentPattern::variable("A"),
-        ComponentPattern::constant(Component3::C2(Symbol::Candidate)),
-    ])
-}
-
 struct Scenario {
     validator: Validator<Symbol>,
     replay: Option<(Checkpoint, Symbol)>,
 }
 
-fn seed(junco: RegexExpr<Symbol>, haystack: &[u8]) -> Scenario {
+fn seed(junco: RegexText, haystack: &[u8]) -> Scenario {
+    let source = facts::rule(
+        junco,
+        "require",
+        "principal: P, action: A, resource: resource.candidate",
+        &translate::SymbolSchema,
+    );
     let mut builder = Validator::builder(Arc::new(Store::new().unwrap()));
-    builder
-        .add_rule(Rule::new(RuleMode::Require, candidate_head(), junco))
-        .expect("workload tail compiles");
+    builder.add_rule(source).expect("workload tail compiles");
     let mut validator = builder.finish().unwrap();
     let mut replay = None;
     for (index, &byte) in haystack.iter().enumerate() {
@@ -225,24 +223,24 @@ fn popular_scan(criterion: &mut Criterion) {
         (
             "script-tag",
             r"(?i)<script[^>]*>~(_*</script>_*)</script>",
-            contains(RegexExpr::concat([
+            contains(RegexText::concat([
                 plain("(?i)<script[^>]*>"),
-                RegexExpr::complement(contains(plain("(?i)</script>"))),
+                RegexText::complement(contains(plain("(?i)</script>"))),
                 plain("(?i)</script>"),
             ])),
         ),
         (
             "deleted-at-token",
             r"(?<!\_)deleted\_at(?!\_)",
-            RegexExpr::concat([
-                RegexExpr::union([
-                    RegexExpr::epsilon(),
-                    RegexExpr::concat([RegexExpr::all(), not_underscore()]),
+            RegexText::concat([
+                RegexText::union([
+                    RegexText::epsilon(),
+                    RegexText::concat([RegexText::all(), not_underscore()]),
                 ]),
                 literal(b"deleted_at"),
-                RegexExpr::union([
-                    RegexExpr::epsilon(),
-                    RegexExpr::concat([not_underscore(), RegexExpr::all()]),
+                RegexText::union([
+                    RegexText::epsilon(),
+                    RegexText::concat([not_underscore(), RegexText::all()]),
                 ]),
             ]),
         ),
@@ -297,7 +295,7 @@ fn popular_validate(criterion: &mut Criterion) {
         (
             "password-strength",
             r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
-            RegexExpr::intersect([
+            RegexText::intersect([
                 plain(r"[A-Za-z\d@$!%*?&]{8,}"),
                 contains(plain("[a-z]")),
                 contains(plain("[A-Z]")),
@@ -309,8 +307,8 @@ fn popular_validate(criterion: &mut Criterion) {
         (
             "username-no-symbols-only",
             r"^(?![\-\_]*$)[A-Za-z0-9][A-Za-z0-9\-\_]{3,20}[A-Za-z0-9]$",
-            RegexExpr::intersect([
-                RegexExpr::complement(plain("[-_]*")),
+            RegexText::intersect([
+                RegexText::complement(plain("[-_]*")),
                 plain("[A-Za-z0-9][A-Za-z0-9_-]{3,20}[A-Za-z0-9]"),
             ]),
             "valid123",

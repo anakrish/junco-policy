@@ -17,5 +17,5 @@ pub use policy::agent::{
     Label,
 };
 pub use policy::flow::{FlowAction, FlowComponent, FlowDenial, FlowEvent, FlowPolicy, FlowRule};
-pub use policy::lock::LockPolicy;
+pub use policy::lock::{LockDiagnostic, LockPolicy};
 pub use policy::rules::{Judged, RuleDenial, RulePolicy, RuleSet};

@@ -25,6 +25,17 @@ pub(crate) enum ExprKind<'s> {
     Complement(Box<Expr<'s>>),
     Exists(Name<'s>, Box<Expr<'s>>),
     Since(Name<'s>, Box<Expr<'s>>, Box<Expr<'s>>),
+    Algebra(Vec<AlgebraOp<'s>>),
+}
+
+#[derive(Debug)]
+pub(crate) enum AlgebraOp<'s> {
+    All(Span),
+    Empty(Span),
+    Epsilon(Span),
+    Event(Name<'s>, Expr<'s>),
+    Combine(Name<'s>, usize),
+    Unary(Name<'s>),
 }
 
 #[derive(Debug)]
@@ -107,6 +118,7 @@ fn reserved(text: &str) -> bool {
             | "or"
             | "not"
             | "_"
+            | "algebra"
     )
 }
 
@@ -154,7 +166,10 @@ pub fn parse(source: &str, limits: Limits) -> Result<Module<'_>, Error> {
                     "identifier byte limit",
                 ));
             }
-            if !source[start..pos].split('.').all(identifier) {
+            let count = source[start..pos]
+                .strip_prefix("count.")
+                .is_some_and(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()));
+            if !count && !source[start..pos].split('.').all(identifier) {
                 return Err(Error::new(
                     K::Syntax,
                     Span { start, end: pos },
@@ -505,6 +520,46 @@ impl<'s> Parser<'s> {
                     self.expect("unless")?;
                     ExprKind::Since(binder, setter, Box::new(self.body(depth + 1)?))
                 }
+            }
+            "algebra" => {
+                self.take()?;
+                self.expect("{")?;
+                let mut ops = Vec::new();
+                while !self.eat("}") {
+                    let op = self.take()?;
+                    self.node(depth, op.span)?;
+                    let instruction = match op.text {
+                        "all" => AlgebraOp::All(op.span),
+                        "empty" => AlgebraOp::Empty(op.span),
+                        "epsilon" => AlgebraOp::Epsilon(op.span),
+                        "event" => {
+                            let binder = self.name(false)?;
+                            AlgebraOp::Event(binder, self.body(depth + 1)?)
+                        }
+                        "concat" | "union" | "intersect" => {
+                            let count = self.take()?;
+                            let number = count
+                                .text
+                                .strip_prefix("count.")
+                                .and_then(|s| s.parse::<usize>().ok())
+                                .ok_or_else(|| {
+                                    Error::new(K::Syntax, count.span, "expected bounded count.N")
+                                })?;
+                            AlgebraOp::Combine(op, number)
+                        }
+                        "star" | "complement" => AlgebraOp::Unary(op),
+                        _ => {
+                            return Err(Error::new(
+                                K::Syntax,
+                                op.span,
+                                "unsupported algebra instruction",
+                            ));
+                        }
+                    };
+                    self.expect(";")?;
+                    ops.push(instruction);
+                }
+                ExprKind::Algebra(ops)
             }
             _ => {
                 let name = self.name(true)?;

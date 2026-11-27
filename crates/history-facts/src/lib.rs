@@ -85,8 +85,8 @@ impl core::error::Error for Error {}
 
 /// Frontend budgets. Source size is checked before allocating tokens or syntax.
 ///
-/// Depth has an additional hard ceiling of 64 to bound recursive parsing,
-/// expansion, Boolean negation and destruction even with permissive host settings.
+/// Ordinary syntax/expansion has a hard ceiling of 64. Flat `algebra` blocks
+/// are parsed/built iteratively and separately bound their output tree height to 256.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
     /// Source bytes.
@@ -95,7 +95,7 @@ pub struct Limits {
     pub tokens: usize,
     /// Bytes per identifier/vocabulary token (no strings in v1).
     pub lexeme_bytes: usize,
-    /// Syntax and expansion nesting, at most 64.
+    /// Recursive syntax and static expansion nesting, at most 64.
     pub depth: usize,
     /// Parsed expression nodes.
     pub nodes: usize,

@@ -27,6 +27,7 @@ history-syntax = { path = "crates/history-syntax", default-features = false, fea
 test-util = ["history-semantics/test-util"]
 
 [dev-dependencies]
+history-facts = { path = "crates/history-facts" }
 criterion = "0.5"
 history-analysis = { path = "crates/history-analysis", default-features = false, features = ["runtime"] }
 resharp = "=0.7.6"

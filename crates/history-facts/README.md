@@ -125,7 +125,13 @@ history_primary
                | "true" | "false" | "empty_history"
                | "(" history_expr ")"
                | "exists" ident "in" "history" event_body
-               | "since" ident "in" "history" event_body "unless" event_body ;
+               | "since" ident "in" "history" event_body "unless" event_body
+               | algebra ;
+algebra      = "algebra" "{" { algebra_op ";" } "}" ;
+algebra_op   = "all" | "empty" | "epsilon" | "event" ident event_body
+               | ("concat" | "union" | "intersect") count
+               | "star" | "complement" ;
+count        = "count." digit { digit } ;
 value        = ident | qname ;
 ```
 
@@ -141,6 +147,54 @@ Precedence, tightest first: calls/parentheses, comparisons, historical `compleme
 `and`, `or`, then semicolon-separated implicit conjunction. Event and history
 conjunctions are different sorts. Empty event bodies are true; empty history bodies
 accept every complete history.
+
+### Explicit full-history algebra
+
+The additive `algebra` escape hatch stays inside named history definitions and
+obligation `if` bodies. It is a **bounded postfix source notation**, not arbitrary
+calls, native AST serialization or a new evaluator. It provides the complete
+existing regular-language algebra while ordinary Facts authoring remains unchanged:
+
+```text
+history terminal_edit(p: principal, r: resource) if {
+    algebra {
+        all;
+        event e { e.principal == p; e.resource == r; e.action == action.edit; };
+        concat count.2;
+    };
+}
+```
+
+This means `All · Test(edit)` (**not** `All · Test(edit) · All`): only a terminal
+matching edit is accepted. `event e { ... }` pushes exactly one-event `Test`;
+the event binder is local to that instruction, with the same coordinate typing,
+candidate exclusion and comparison-only safety as other predicate bodies.
+
+`all`, `empty` and `epsilon` push their distinct whole-history languages.
+`concat/union/intersect count.N` consume the last N languages, preserving their
+source order, and push the corresponding existing DSL node. `count.0` is allowed:
+empty concat is epsilon, empty union is empty, empty intersection is universal.
+`star` and `complement` consume one language and push Kleene repetition or
+whole-history complement. The final stack must contain exactly one language.
+Underflow, extra values, malformed/overflowing counts and unsupported instructions
+are structured errors, never defaults.
+
+Counts are the **only** decimal syntax and only in these operator positions;
+they are not component literals or runtime numeric values. Algebra does not
+resolve names on its stack, retain historical values, perform unification or
+execute source functions. All predicate calls still use bounded acyclic expansion.
+
+Parsing stores flat instructions and lowering consumes them iteratively, so
+generated nested optional repetitions (such as the committed SMT corpus's
+67-bound loops) do not need recursive textual nesting or a raised recursive parser
+limit. Each produced algebra tree has a fixed height ceiling of 256; ordinary
+outer syntax remains limited to 64 (combined regex height is bounded by 320).
+Stack/node work shares the existing budgets, and failure cleanup plus unused
+history-definition disposal uses the existing iterative `Rule::dispose`.
+Callers discarding a deep returned source without compilation should also use
+`Rule::dispose`; the existing compiler already disposes source iteratively.
+No flattening changes alternating operators, optional suffix nesting or singleton
+versus complete-history semantics.
 
 ### Names, typing and deliberate ambiguity fixes
 
@@ -206,7 +260,8 @@ its recursive syntax work as well as AST nodes; lowering charges validation of
 unused definitions, arguments, repeated macro expansion and generated temporal
 nodes. Limits are conservative work budgets, not promises to fit that many
 instructions in a runtime store. Depth has a hard ceiling of 64 even if the host
-raises `Limits::depth`. Source bytes are checked before token allocation. No
+raises `Limits::depth`; flat algebra has the separate fixed tree bound above.
+Source bytes are checked before token allocation. No
 expansion is truncated or replaced with a default. Existing runtime allocation,
 graph and evaluator limits remain independent; convenience compilation uses the
 existing public APIs, not a new budgeting interface.
@@ -225,7 +280,8 @@ values, avoids inventing coercions, and bounds all literal processing. Both are
 documented compatibility restrictions, not silent partial support. No Rego
 unification (`=`), negation-as-failure (`not`), incremental/unordered definitions,
 comprehensions, collections, arithmetic, builtins, arbitrary calls, historical
-registers/joins, recursion, general sequence algebra or dynamic loading.
+registers/joins, recursion or dynamic loading. Full regular-language algebra is
+available only through the explicit bounded escape hatch, not implicit calls.
 
 Focused tests compare actual parsed source with independent hand-built existing
 DSL rules over bounded exhaustive traces, including head mismatch, tail membership,

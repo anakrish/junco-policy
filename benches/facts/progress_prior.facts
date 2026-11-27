@@ -1,0 +1,8 @@
+language junco.facts.v1;
+package benchmark.progress;
+schema lock;
+policy releases ordered {
+    require prior on {principal: actor, action: action.release, resource: resource}
+    if { exists e in history { e.principal == actor; e.action == action.edit; e.resource == resource; }; }
+    report benchmark.rule;
+}

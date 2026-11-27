@@ -1,5 +1,11 @@
 # SMT regex inclusion benchmark
 
+Junco formulas now generate authoritative [Facts algebra text](../facts/README.md)
+and pass through the published frontend before analyzer/kernel calls. The original
+formulas, alphabet, optional-tail nesting and all 100 instances remain unchanged.
+Parsing/lowering is untimed. Historical latency tables below predate this frontend
+port; smoke tests do not establish new latency results.
+
 `cargo bench --bench smt` measures the time spent in
 `history_analysis::PolicyAnalyzer::tail_included(head, left, right)` for each RegExLib Subset
 inclusion instance. These tails have no candidate variables, so an inhabited constant head

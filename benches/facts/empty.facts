@@ -1,0 +1,4 @@
+language junco.facts.v1;
+package benchmark.rollback;
+schema lock;
+policy no_obligations ordered {}

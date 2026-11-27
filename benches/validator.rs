@@ -9,20 +9,20 @@ use std::time::{Duration, Instant};
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use history_semantics::{Decision, Validator};
 use history_store::Store;
-use history_syntax::{
-    AtomPattern, Comparison, Component, ComponentPattern, Head, RegexExpr, Rule, RuleMode, TestExpr,
-};
+use history_syntax::Rule;
 use junco_core::Request;
-use junco_policy::{Action, LockComponent, LockEvent};
+use junco_policy::{Action, LockEvent};
 use std::sync::Arc;
+mod facts;
+use facts::Algebra as Text;
 
 /// Benchmark principal identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Actor(u32);
+pub(crate) struct Actor(pub(crate) u32);
 
 /// Benchmark resource identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Path(u32);
+pub(crate) struct Path(pub(crate) u32);
 
 const ALICE: Actor = Actor(0);
 const CANDIDATE: Actor = Actor(1);
@@ -43,92 +43,46 @@ fn request(actor: Actor, action: Action, path: Path) -> Request<LockEvent<Actor,
     Request::new(LockEvent::new(actor, action, path), ())
 }
 
-fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
-    let actor = format!("actor-{suffix}");
-    let target = format!("target-{suffix}");
-    let principal = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(Component(0), ComponentPattern::variable(actor.clone())),
-    );
-    let action = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(Action::Edit)),
-        ),
-    );
-    let resource = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(Component(2), ComponentPattern::variable(target.clone())),
-    );
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable(actor),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable(target),
-        ]),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(TestExpr::and([principal, action, resource])),
-        ]),
-    )
+pub(crate) fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
+    let text = include_str!("facts/terminal_prior.facts")
+        .replace("obligation", &format!("obligation_{suffix}"));
+    facts::rules(&text, &facts::LockSchema(Actor, Path))
+        .pop()
+        .unwrap()
 }
 
-fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
-    let matching_remove = RegexExpr::test(TestExpr::and([
-        TestExpr::atom(
-            Comparison::Eq,
-            AtomPattern::new(
-                Component(1),
-                ComponentPattern::constant(LockComponent::Action(Action::Remove)),
-            ),
-        ),
-        TestExpr::atom(
-            Comparison::Eq,
-            AtomPattern::new(Component(2), ComponentPattern::variable("target")),
-        ),
-    ]));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Remove)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat([RegexExpr::all(), matching_remove, RegexExpr::all()]),
+pub(crate) fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
+    facts::rules(
+        include_str!("facts/duplicate_remove.facts"),
+        &facts::LockSchema(Actor, Path),
     )
+    .pop()
+    .unwrap()
 }
 
-fn every_resource_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
-    RegexExpr::star(RegexExpr::test(TestExpr::atom(
-        Comparison::Neq,
-        AtomPattern::new(
-            Component(2),
-            ComponentPattern::constant(LockComponent::Resource(Path(ABSENT_IDS + index as u32))),
-        ),
+fn every_resource_leaf(index: usize) -> Text {
+    Text::star(Text::event(&format!(
+        "e.resource != resource.v{};",
+        ABSENT_IDS + index as u32
     )))
 }
 
-fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+pub(crate) fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(depth > 0, "regex depth must be positive");
     let mut leaves = (0..depth).map(every_resource_leaf);
     let mut tail = leaves.next().expect("positive depth has one leaf");
     for (index, leaf) in leaves.enumerate() {
         tail = if index % 2 == 0 {
-            RegexExpr::union([tail, leaf])
+            Text::union([tail, leaf])
         } else {
-            RegexExpr::intersect([tail, leaf])
+            Text::intersect([tail, leaf])
         };
     }
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
+    facts::rule(
         tail,
+        "require",
+        "principal: actor, action: action.release, resource: target",
+        &facts::LockSchema(Actor, Path),
     )
 }
 
@@ -138,63 +92,49 @@ fn unique_read(index: usize) -> Request<LockEvent<Actor, Path>, ()> {
 }
 
 // Each distinct star accepts every benchmark event and is stable under differentiation.
-fn every_event_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
-    RegexExpr::star(RegexExpr::test(TestExpr::atom(
-        Comparison::Neq,
-        AtomPattern::new(
-            Component(0),
-            ComponentPattern::constant(LockComponent::Principal(Actor(ABSENT_IDS + index as u32))),
-        ),
+fn every_event_leaf(index: usize) -> Text {
+    Text::star(Text::event(&format!(
+        "e.principal != principal.v{};",
+        ABSENT_IDS + index as u32
     )))
 }
 
-fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+pub(crate) fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(depth > 0, "regex depth must be positive");
     let mut leaves = (0..depth).map(every_event_leaf);
     let mut tail = leaves.next().expect("positive depth has one leaf");
     // Alternating operators retain binary nesting because canonicalization only flattens like kinds.
     for (index, leaf) in leaves.enumerate() {
         tail = if index % 2 == 0 {
-            RegexExpr::union([tail, leaf])
+            Text::union([tail, leaf])
         } else {
-            RegexExpr::intersect([tail, leaf])
+            Text::intersect([tail, leaf])
         };
     }
 
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
+    facts::rule(
         tail,
+        "require",
+        "principal: actor, action: action.release, resource: target",
+        &facts::LockSchema(Actor, Path),
     )
 }
 
-fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
+pub(crate) fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
     let factors = (0..steps).map(|index| {
-        RegexExpr::union([
-            RegexExpr::epsilon(),
-            RegexExpr::test(TestExpr::atom(
-                Comparison::Neq,
-                AtomPattern::new(
-                    Component(2),
-                    ComponentPattern::constant(LockComponent::Resource(Path(
-                        ABSENT_IDS + index as u32,
-                    ))),
-                ),
+        Text::union([
+            Text::epsilon(),
+            Text::event(&format!(
+                "e.resource != resource.v{};",
+                ABSENT_IDS + index as u32
             )),
         ])
     });
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat(factors),
+    facts::rule(
+        Text::concat(factors),
+        "require",
+        "principal: actor, action: action.release, resource: target",
+        &facts::LockSchema(Actor, Path),
     )
 }
 
@@ -204,47 +144,32 @@ fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
 /// read. A shorter all-read history keeps adding candidate suffixes without reaching a terminal
 /// residual. The full DFA has exponentially many states even though this measured path grows
 /// linearly.
-fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
+pub(crate) fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(window > 0, "residual-growth window must be positive");
-    let any_event = RegexExpr::test(TestExpr::true_test());
-    let read = RegexExpr::test(TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(Action::Read)),
-        ),
-    ));
-    let factors = std::iter::once(RegexExpr::all())
+    let any_event = Text::event("true;");
+    let read = Text::event("e.action == action.read;");
+    let factors = std::iter::once(Text::all())
         .chain(std::iter::once(read))
         .chain(std::iter::repeat_n(any_event, window + 1));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat(factors),
+    facts::rule(
+        Text::concat(factors),
+        "forbid",
+        "principal: actor, action: action.release, resource: target",
+        &facts::LockSchema(Actor, Path),
     )
 }
 
 /// One unique absent-witness rule that forces a complete nonterminal history scan.
-fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
-    let absent = RegexExpr::test(TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(0),
-            ComponentPattern::constant(LockComponent::Principal(Actor(ABSENT_IDS + index as u32))),
-        ),
+pub(crate) fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
+    let absent = Text::event(&format!(
+        "e.principal == principal.v{};",
+        ABSENT_IDS + index as u32
     ));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat([RegexExpr::all(), absent, RegexExpr::all()]),
+    facts::rule(
+        Text::concat([Text::all(), absent, Text::all()]),
+        "forbid",
+        "principal: actor, action: action.release, resource: target",
+        &facts::LockSchema(Actor, Path),
     )
 }
 
@@ -368,14 +293,15 @@ fn benchmark_growing_residual_stress(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(3))
         .sample_size(10);
     for window in [4_usize, 8, 12] {
+        let lowered = growing_residual_rule(window);
         compile.bench_with_input(
             BenchmarkId::from_parameter(window),
             &window,
-            |bencher, &window| {
+            |bencher, _| {
                 bencher.iter_custom(|iterations| {
                     let mut elapsed = Duration::ZERO;
                     for _ in 0..iterations {
-                        let source = growing_residual_rule(window);
+                        let source = lowered.clone();
                         let store = Arc::new(Store::new().unwrap());
                         let start = Instant::now();
                         let mut builder = Validator::builder(Arc::clone(&store));
@@ -445,14 +371,15 @@ fn benchmark_many_rules_stress(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(3))
         .sample_size(10);
     for rule_count in RULE_COUNTS {
+        let lowered: Vec<_> = (0..rule_count).map(absent_witness_rule).collect();
         compile.bench_with_input(
             BenchmarkId::from_parameter(rule_count),
             &rule_count,
-            |bencher, &rule_count| {
+            |bencher, _| {
                 bencher.iter_custom(|iterations| {
                     let mut elapsed = Duration::ZERO;
                     for _ in 0..iterations {
-                        let rules = (0..rule_count).map(absent_witness_rule).collect::<Vec<_>>();
+                        let rules = lowered.clone();
                         let store = Arc::new(Store::new().unwrap());
                         let start = Instant::now();
                         let mut builder = Validator::builder(Arc::clone(&store));
@@ -523,30 +450,26 @@ fn benchmark_many_rules_stress(criterion: &mut Criterion) {
 fn benchmark_compilation(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("compile_rules");
     for count in [1_usize, 16, 64] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(count),
-            &count,
-            |bencher, &count| {
-                bencher.iter_custom(|iterations| {
-                    let mut elapsed = Duration::ZERO;
-                    for _ in 0..iterations {
-                        let rules: Vec<Rule<LockEvent<Actor, Path>>> =
-                            (0..count).map(prior_edit_rule).collect();
-                        let store = Arc::new(Store::new().unwrap());
-                        let start = Instant::now();
-                        let mut builder = Validator::builder(Arc::clone(&store));
-                        for rule in rules {
-                            builder.add_rule(rule).expect("benchmark rule is valid");
-                        }
-                        let validator = builder.finish().unwrap();
-                        black_box(&validator);
-                        elapsed += start.elapsed();
-                        drop(validator);
+        let lowered: Vec<_> = (0..count).map(prior_edit_rule).collect();
+        group.bench_with_input(BenchmarkId::from_parameter(count), &count, |bencher, _| {
+            bencher.iter_custom(|iterations| {
+                let mut elapsed = Duration::ZERO;
+                for _ in 0..iterations {
+                    let rules = lowered.clone();
+                    let store = Arc::new(Store::new().unwrap());
+                    let start = Instant::now();
+                    let mut builder = Validator::builder(Arc::clone(&store));
+                    for rule in rules {
+                        builder.add_rule(rule).expect("benchmark rule is valid");
                     }
-                    elapsed
-                });
-            },
-        );
+                    let validator = builder.finish().unwrap();
+                    black_box(&validator);
+                    elapsed += start.elapsed();
+                    drop(validator);
+                }
+                elapsed
+            });
+        });
     }
     group.finish();
 }
@@ -623,6 +546,11 @@ fn benchmark_denial(criterion: &mut Criterion) {
 }
 
 fn benchmark_rollback(criterion: &mut Criterion) {
+    let empty_sources = facts::rules(
+        include_str!("facts/empty.facts"),
+        &facts::LockSchema(Actor, Path),
+    );
+    assert!(empty_sources.is_empty());
     let mut group = criterion.benchmark_group("rollback");
     for removed_events in [1_usize, 64, 1024] {
         let store = Arc::new(Store::new().unwrap());
@@ -632,8 +560,13 @@ fn benchmark_rollback(criterion: &mut Criterion) {
             |bencher, &removed_events| {
                 bencher.iter_batched(
                     || {
-                        let mut validator =
-                            Validator::builder(Arc::clone(&store)).finish().unwrap();
+                        let mut builder = Validator::builder(Arc::clone(&store));
+                        for rule in &empty_sources {
+                            builder
+                                .add_rule(rule.clone())
+                                .expect("empty benchmark source compiles");
+                        }
+                        let mut validator = builder.finish().unwrap();
                         let checkpoint = validator.checkpoint();
                         for _ in 0..removed_events {
                             let decision =

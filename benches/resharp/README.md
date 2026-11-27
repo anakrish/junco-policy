@@ -1,5 +1,10 @@
 # RE# comparison benchmark
 
+Junco policy construction emits [Facts algebra text](../facts/README.md), then
+parses/typechecks/lowers it outside all kernel timers. Corpus, byte/open-domain
+semantics, custom operations and timing boundaries below are unchanged.
+Smoke checks are not new performance measurements.
+
 ```sh
 cargo bench --bench resharp -- --noplot
 cargo bench --bench resharp -- 'corpus/literal-miss/' --noplot

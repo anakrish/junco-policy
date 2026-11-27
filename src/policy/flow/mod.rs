@@ -149,6 +149,24 @@ impl<P: Label, V: Label, L: Label> FlowRule<P, V, L> {
         Self(rule)
     }
 
+    /// Pair an external source with the native no-contact diagnostic and fixes.
+    /// The source is compiled by the existing rule policy; no decision logic changes.
+    /// Callers must supply a source expressing the intended taint/sink relationship.
+    pub fn from_source(tainted: L, sink: L, rule: Rule<FlowEvent<P, V, L>>) -> Self {
+        Self(TraceRule::new(rule, move |event: &FlowEvent<P, V, L>| {
+            (
+                format!(
+                    "{} passed {} to a {sink} sink after receiving {tainted} data",
+                    event.principal, event.handle
+                ),
+                vec![format!(
+                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
+                    event.principal, event.handle
+                )],
+            )
+        }))
+    }
+
     /// Forbids passing a tainted value to any of `sinks` until it is declassified.
     ///
     /// Reading or receiving `tainted` data establishes taint for the same principal
@@ -187,30 +205,23 @@ impl<P: Label, V: Label, L: Label> FlowRule<P, V, L> {
             sinks
                 .iter()
                 .map(|&sink| {
-                    TraceRule::new(
+                    Self::from_source(
+                        tainted,
+                        sink,
                         Rule::new(
                             RuleMode::Forbid,
                             Head::new([
                                 ComponentPattern::variable(PRINCIPAL_VAR),
                                 ComponentPattern::variable(HANDLE_VAR),
-                                ComponentPattern::constant(FlowComponent::Action(FlowAction::Contact)),
+                                ComponentPattern::constant(FlowComponent::Action(
+                                    FlowAction::Contact,
+                                )),
                                 ComponentPattern::constant(FlowComponent::Label(sink)),
                             ]),
                             tail.clone(),
                         ),
-                        move |event: &FlowEvent<P, V, L>| {
-                            (
-                                format!(
-                                    "{} passed {} to a {sink} sink after receiving {tainted} data",
-                                    event.principal, event.handle
-                                ),
-                                vec![format!(
-                                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
-                                    event.principal, event.handle
-                                )],
-                            )
-                        },
                     )
+                    .0
                 })
                 .collect(),
         )

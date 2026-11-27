@@ -1,0 +1,19 @@
+language junco.facts.v1;
+package benchmark.approval;
+schema lock;
+policy releases ordered {
+    require approved on {principal: actor, action: action.release, resource: resource}
+    if {
+        algebra {
+            all;
+            event e { e.resource == resource; e.action == action.edit; };
+            event e { e.resource != resource or e.action != action.edit; };
+            star;
+            event e { e.resource == resource; e.action == action.remove; e.principal != actor; };
+            event e { e.resource != resource or e.action != action.edit; };
+            star;
+            concat count.5;
+        };
+    }
+    report benchmark.rule;
+}

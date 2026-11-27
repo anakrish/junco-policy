@@ -23,7 +23,7 @@ use history_semantics::policy::{
     CompiledPolicy, PolicyRule, action_is, forbid, last_state_change, principal_is, resource_is,
 };
 use history_store::{History, Store};
-use history_syntax::{Comparison, RegexExpr, TestExpr};
+use history_syntax::{Comparison, RegexExpr, Rule, TestExpr};
 use junco_core::{CompileError, HistoryError};
 
 use crate::{Action, LockComponent, LockEvent};
@@ -287,6 +287,17 @@ where
     claims: ClaimTable<P, R>,
 }
 
+/// Native lock diagnostic selected for an externally authored source rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LockDiagnostic {
+    /// Ownership denial, including current owner and release fix.
+    Owner,
+    /// Freshness denial, including read fix.
+    Stale,
+    /// Last-reader denial, including current reader and read fix.
+    Reader,
+}
+
 impl<P, R> LockPolicy<P, R>
 where
     P: Copy + Debug + Eq + Hash + Display,
@@ -296,6 +307,31 @@ where
     pub fn new(store: Arc<Store<LockEvent<P, R>>>) -> Result<Self, CompileError> {
         Ok(Self {
             compiled: CompiledPolicy::new(store, lock_rules())?,
+            claims: ClaimTable::new(),
+        })
+    }
+
+    /// Compile externally authored rules while retaining the native diagnostic
+    /// context fold and error path. Sources and diagnostic identities stay in input order.
+    /// The caller is responsible for authoring the intended lock semantics;
+    /// [`Self::new`] continues to use the unchanged built-in table.
+    pub fn from_sources(
+        store: Arc<Store<LockEvent<P, R>>>,
+        sources: Vec<(Rule<LockEvent<P, R>>, LockDiagnostic)>,
+    ) -> Result<Self, CompileError> {
+        let rules = sources
+            .into_iter()
+            .map(|(rule, diagnostic)| PolicyRule {
+                rule,
+                diagnostic: Box::new(match diagnostic {
+                    LockDiagnostic::Owner => owner_denial,
+                    LockDiagnostic::Stale => stale_denial,
+                    LockDiagnostic::Reader => reader_denial,
+                }),
+            })
+            .collect::<Vec<_>>();
+        Ok(Self {
+            compiled: CompiledPolicy::new(store, rules)?,
             claims: ClaimTable::new(),
         })
     }

@@ -5,9 +5,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use history_facts::{Limits, Schema, lower, parse};
 use history_semantics::PolicyDecision;
 use history_store::{History, Store};
-use junco_policy::{FlowAction, FlowEvent, FlowPolicy, FlowRule};
+use junco_policy::{FlowAction, FlowComponent, FlowEvent, FlowPolicy, FlowRule};
 use rig_core::completion::{CompletionRequest, CompletionResponse, ToolDefinition};
 use rig_core::http_client::DynHttpClient;
 use rig_core::message::{Message, ToolChoice, ToolName, ToolResultContent};
@@ -208,17 +209,53 @@ impl FromStr for Agent {
 
 pub type CamelEvent = FlowEvent<Agent, Handle, Class>;
 
+struct CamelSchema;
+impl Schema<CamelEvent> for CamelSchema {
+    fn name(&self) -> &str {
+        "flow"
+    }
+    fn field(&self, name: &str) -> Option<usize> {
+        match name {
+            "principal" => Some(0),
+            "handle" => Some(1),
+            "action" => Some(2),
+            "label" => Some(3),
+            _ => None,
+        }
+    }
+    fn constant(&self, name: &str) -> Option<FlowComponent<Agent, Handle, Class>> {
+        Some(match name {
+            "action.read" => FlowComponent::Action(FlowAction::Read),
+            "action.receive" => FlowComponent::Action(FlowAction::Receive),
+            "action.contact" => FlowComponent::Action(FlowAction::Contact),
+            "action.declassify" => FlowComponent::Action(FlowAction::Declassify),
+            "label.untrusted" => FlowComponent::Label(Class::Untrusted),
+            "label.private" => FlowComponent::Label(Class::Private),
+            "label.sink" => FlowComponent::Label(Class::Sink),
+            "label.peer" => FlowComponent::Label(Class::Peer),
+            _ => return None,
+        })
+    }
+    fn diagnostic(&self, name: &str) -> bool {
+        matches!(name, "flow.untrusted_sink" | "flow.private_peer")
+    }
+}
+
 pub fn camel_policy() -> FlowPolicy<Agent, Handle, Class> {
-    FlowPolicy::new()
-        .rule(FlowRule::no_contact_after_read(
-            Class::Untrusted,
-            &[Class::Sink],
-        ))
-        .rule(FlowRule::no_contact_after_read(
-            Class::Private,
-            &[Class::Peer],
-        ))
-        .audit()
+    let module = parse(include_str!("../facts/camel.facts"), Limits::default())
+        .expect("CaMeL Facts source parses");
+    let lowered =
+        lower(&module, &CamelSchema, Limits::default()).expect("CaMeL Facts source lowers");
+    let mut policy = FlowPolicy::new();
+    for obligation in lowered.obligations {
+        let (tainted, sink) = match obligation.metadata.report.as_str() {
+            "flow.untrusted_sink" => (Class::Untrusted, Class::Sink),
+            "flow.private_peer" => (Class::Private, Class::Peer),
+            _ => panic!("unknown CaMeL report"),
+        };
+        policy = policy.rule(FlowRule::from_source(tainted, sink, obligation.rule));
+    }
+    policy.audit()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]

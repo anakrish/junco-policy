@@ -1,4 +1,4 @@
-use crate::parser::{Expr, ExprKind as X, Module, Name};
+use crate::parser::{AlgebraOp, Expr, ExprKind as X, Module, Name};
 use crate::{Error, ErrorKind as K, Limits, Lowered, Metadata, Obligation, Schema, Span};
 use alloc::{boxed::Box, format, string::ToString, vec, vec::Vec};
 use history_syntax::{
@@ -74,7 +74,9 @@ pub fn lower<E: Event>(
         let result = if def.event {
             resolver.event(&def.body, &env, binder, 1).map(|_| ())
         } else {
-            resolver.history(&def.body, &env, 1).map(|_| ())
+            resolver.history(&def.body, &env, 1).map(|tail| {
+                Rule::new(history_syntax::RuleMode::Require, Head::new([]), tail).dispose();
+            })
         };
         resolver.stack.pop();
         result?;
@@ -418,6 +420,7 @@ impl<'s, E: Event, S: Schema<E>> Resolver<'_, 's, E, S> {
                     R::Star(Box::new(R::Test(stable))),
                 ])
             }
+            X::Algebra(ops) => self.algebra(ops, env, depth + 1, expr.span)?,
             _ => {
                 return Err(self.error(
                     K::Type,
@@ -426,6 +429,96 @@ impl<'s, E: Event, S: Schema<E>> Resolver<'_, 's, E, S> {
                 ));
             }
         })
+    }
+    fn algebra(
+        &mut self,
+        ops: &[AlgebraOp<'s>],
+        env: &Env<'s, E>,
+        depth: usize,
+        span: Span,
+    ) -> Result<R<E>, Error> {
+        let mut stack: Vec<(R<E>, usize)> = Vec::new();
+        let result = (|| {
+            for op in ops {
+                self.tick(span, depth)?;
+                match op {
+                    AlgebraOp::All(s) | AlgebraOp::Empty(s) | AlgebraOp::Epsilon(s) => {
+                        self.tick(*s, depth)?;
+                        let regex = match op {
+                            AlgebraOp::All(_) => R::All,
+                            AlgebraOp::Empty(_) => R::Empty,
+                            _ => R::Epsilon,
+                        };
+                        stack.push((regex, 1));
+                    }
+                    AlgebraOp::Event(binder, body) => {
+                        self.binder(*binder, env)?;
+                        stack.push((
+                            R::Test(self.event(body, env, Some(binder.text), depth + 1)?),
+                            1,
+                        ));
+                    }
+                    AlgebraOp::Combine(name, count) => {
+                        if *count > stack.len() {
+                            return Err(self.error(K::Type, name.span, "algebra stack underflow"));
+                        }
+                        let begin = stack.len() - count;
+                        let height = stack[begin..].iter().map(|p| p.1).max().unwrap_or(0) + 1;
+                        if height > 256 {
+                            return Err(self.error(
+                                K::Limit,
+                                name.span,
+                                "algebra tree depth limit (256)",
+                            ));
+                        }
+                        let children = stack.drain(begin..).map(|p| p.0).collect();
+                        let regex = match name.text {
+                            "concat" => R::Concat(children),
+                            "union" => R::Union(children),
+                            _ => R::Intersect(children),
+                        };
+                        stack.push((regex, height));
+                    }
+                    AlgebraOp::Unary(name) => {
+                        let height = stack
+                            .last()
+                            .ok_or_else(|| {
+                                self.error(K::Type, name.span, "algebra stack underflow")
+                            })?
+                            .1
+                            + 1;
+                        if height > 256 {
+                            return Err(self.error(
+                                K::Limit,
+                                name.span,
+                                "algebra tree depth limit (256)",
+                            ));
+                        }
+                        let (regex, _) = stack.pop().expect("checked nonempty stack");
+                        stack.push((
+                            if name.text == "star" {
+                                R::Star(Box::new(regex))
+                            } else {
+                                R::Not(Box::new(regex))
+                            },
+                            height,
+                        ));
+                    }
+                }
+            }
+            if stack.len() != 1 {
+                return Err(self.error(
+                    K::Type,
+                    span,
+                    "algebra must produce exactly one complete-history language",
+                ));
+            }
+            Ok(stack.pop().expect("one algebra result").0)
+        })();
+        for (tail, _) in stack {
+            Rule::new(history_syntax::RuleMode::Require, Head::new([]), tail).dispose();
+        }
+        result
     }
     fn negate(&mut self, test: T<E>, span: Span, depth: usize) -> Result<T<E>, Error> {
         self.tick(span, depth)?;
