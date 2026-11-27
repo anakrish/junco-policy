@@ -1,0 +1,8 @@
+junco 1;
+schema "bench.lock/1";
+policy progress {
+ rule prior_edit {
+  candidate { principal: $actor, action: action.release, resource: $resource };
+  require all >> event { principal == $actor and action == action.edit and resource == $resource } >> all;
+ }
+}

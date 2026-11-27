@@ -7,6 +7,17 @@ cargo +1.98.1 bench --manifest-path fuzz/Cargo.toml --bench other -- 'dogwood_fu
 
 `dogwood_replay`: cold replay of 16, 64, 256, and 1,024 granted events from the lock-policy fuzz harness, through all three engines. Throughput counts granted events; preflight checks every verdict.
 
+All Junco benchmark policies, including `lock_policy` and `lock`, now compile
+`benches/text/lock.junco` through `history-text` and the benchmark-only
+`textual_benchmarks` adapter. `LockPolicy::from_rules` preserves the same seven
+native diagnostic callbacks and incremental owner/reader claim fold.
+Parsing/lowering stay outside the existing timed regions. Differential preflight
+compares full denials/fixes against the native constructor. The generator,
+fuzzer and default no-surprise oracle still use the original policy unchanged.
+Dogwood and VeriMon formulas, calibration and preflights are unchanged.
+`--test --noplot` is smoke validation, not a performance measurement; `other`
+still requires the external VeriMon executable and fails explicitly if absent.
+
 `dogwood_fuzz`: the harness's 32 deterministic seeded traces, including denials in generation order. All three engines must match all 449 candidates (42 denied) before timing; throughput counts candidates, not committed events.
 
 `dogwood_examples`: Dogwood alone replays 52 default-feature doc examples. Preflight matches the CLI's verdict/rule/error stream against `expected.out`; throughput counts all input events. Dogwood has no benchmark suite at the pinned commit, so these are documentation workloads, not upstream benchmarks.

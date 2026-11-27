@@ -10,11 +10,15 @@ use std::time::{Duration, Instant};
 use criterion::{Criterion, SamplingMode, Throughput, criterion_group};
 use history_semantics::Validator;
 use history_store::{Checkpoint, Store};
-use history_syntax::{Component3, ComponentPattern, Head, RegexExpr, Rule, RuleMode};
 use junco_core::Request;
 use resharp::{RegexOptions, UnicodeMode};
 
+mod native_translate;
+#[path = "../text/mod.rs"]
+#[allow(dead_code)]
+mod text;
 mod translate;
+use text::Expression as RegexExpr;
 
 use translate::{Symbol, class, contains, literal, plain, tail, translate};
 
@@ -74,25 +78,35 @@ fn popular_haystack() -> Arc<[u8]> {
 struct Workload {
     group: String,
     resharp: String,
-    junco: RegexExpr<Symbol>,
+    junco: RegexExpr,
+    native: history_syntax::RegexExpr<Symbol>,
     haystack: Arc<[u8]>,
 }
 
 impl Workload {
     fn standard(group: impl Into<String>, pattern: &str, haystack: Arc<[u8]>) -> Self {
-        Self::custom(group, pattern, tail(translate(pattern)), haystack)
+        Self {
+            group: group.into(),
+            resharp: pattern.to_owned(),
+            junco: tail(translate(pattern)),
+            native: native_translate::tail(native_translate::translate(pattern)),
+            haystack,
+        }
     }
 
     fn custom(
         group: impl Into<String>,
         resharp: &str,
-        junco: RegexExpr<Symbol>,
+        junco: RegexExpr,
         haystack: Arc<[u8]>,
     ) -> Self {
+        let group = group.into();
+        let native = custom_oracle(&group);
         Self {
-            group: group.into(),
+            group,
             resharp: resharp.to_owned(),
             junco,
+            native,
             haystack,
         }
     }
@@ -108,23 +122,15 @@ fn resharp_regex(pattern: &str) -> resharp::Regex {
     .expect(pattern)
 }
 
-fn candidate_head() -> Head<Symbol> {
-    Head::new([
-        ComponentPattern::variable("P"),
-        ComponentPattern::variable("A"),
-        ComponentPattern::constant(Component3::C2(Symbol::Candidate)),
-    ])
-}
-
 struct Scenario {
     validator: Validator<Symbol>,
     replay: Option<(Checkpoint, Symbol)>,
 }
 
-fn seed(junco: RegexExpr<Symbol>, haystack: &[u8]) -> Scenario {
+fn seed(junco: RegexExpr, haystack: &[u8]) -> Scenario {
     let mut builder = Validator::builder(Arc::new(Store::new().unwrap()));
     builder
-        .add_rule(Rule::new(RuleMode::Require, candidate_head(), junco))
+        .add_rule(translate::rule(junco))
         .expect("workload tail compiles");
     let mut validator = builder.finish().unwrap();
     let mut replay = None;
@@ -144,13 +150,34 @@ fn seed(junco: RegexExpr<Symbol>, haystack: &[u8]) -> Scenario {
 }
 
 fn bench(criterion: &mut Criterion, workload: Workload) {
+    translate::equivalent(workload.junco.clone(), workload.native.clone());
     let rs = resharp_regex(&workload.resharp);
     let expected = rs.is_match(&workload.haystack).expect(&workload.group);
-    let mut scenario = seed(workload.junco, &workload.haystack);
+    let mut scenario = seed(workload.junco.clone(), &workload.haystack);
     assert_eq!(
         scenario.validator.permits(&Symbol::Candidate).unwrap(),
         expected,
         "{}",
+        workload.group
+    );
+    let store = Arc::new(Store::new().unwrap());
+    let history = history_store::History::from_events(
+        store.clone(),
+        scenario.validator.history().iter().copied(),
+    )
+    .unwrap();
+    let source = translate::rule(workload.junco.clone());
+    let mut oracle = history_semantics::CompiledRule::new(
+        store,
+        history_syntax::Rule::new(source.mode, source.head, workload.native),
+    )
+    .unwrap();
+    assert_eq!(
+        oracle
+            .accepts_history(&history, &Symbol::Candidate)
+            .unwrap(),
+        Some(expected),
+        "{} native oracle",
         workload.group
     );
     let mut group = criterion.benchmark_group(&workload.group);
@@ -191,7 +218,124 @@ fn bench(criterion: &mut Criterion, workload: Workload) {
     group.finish();
 }
 
+fn custom_oracle(group: &str) -> history_syntax::RegexExpr<Symbol> {
+    use history_syntax::RegexExpr as R;
+    use native_translate::{class, contains, literal, plain};
+    match group {
+        "popular/scan/script-tag" => contains(R::concat([
+            plain("(?i)<script[^>]*>"),
+            R::complement(contains(plain("(?i)</script>"))),
+            plain("(?i)</script>"),
+        ])),
+        "popular/scan/deleted-at-token" => {
+            let not_underscore = || class((0..=255u8).filter(|b| *b != b'_'));
+            R::concat([
+                R::union([R::epsilon(), R::concat([R::all(), not_underscore()])]),
+                literal(b"deleted_at"),
+                R::union([R::epsilon(), R::concat([not_underscore(), R::all()])]),
+            ])
+        }
+        "popular/scan/decimal-point" => contains(plain(r"\d\.\S")),
+        "popular/scan/attribute-whitespace" => contains(plain(r#"["']\s+[^<>\s]+="#)),
+        "popular/validate/password-strength" => R::intersect([
+            plain(r"[A-Za-z\d@$!%*?&]{8,}"),
+            contains(plain("[a-z]")),
+            contains(plain("[A-Z]")),
+            contains(plain(r"\d")),
+            contains(plain("[@$!%*?&]")),
+        ]),
+        "popular/validate/username-no-symbols-only" => R::intersect([
+            R::complement(plain("[-_]*")),
+            plain("[A-Za-z0-9][A-Za-z0-9_-]{3,20}[A-Za-z0-9]"),
+        ]),
+        "corpus/lookaround" => contains(plain(r"\s[A-Z][a-z]+\s")),
+        _ => panic!("missing independent custom fixture oracle: {group}"),
+    }
+}
+
+pub fn textual_preflight() {
+    for pattern in [
+        "",
+        "a",
+        ".",
+        "[^a]",
+        "[\\x00-\\xff]",
+        "(ab|cd)*",
+        r"\b[A-Z][a-z]+\b",
+        "^[a-z]{1,67}$",
+        r"\d+\.\d+\.\d+",
+        "^$",
+        r"\s+",
+    ] {
+        translate::equivalent(
+            tail(translate(pattern)),
+            native_translate::tail(native_translate::translate(pattern)),
+        );
+    }
+    for members in [
+        Vec::new(),
+        (0..=255u8).collect(),
+        (0..=127u8).collect(),
+        (0..=255u8).filter(|b| *b != b'a').collect(),
+    ] {
+        translate::equivalent(
+            class(members.iter().copied()),
+            native_translate::class(members),
+        );
+    }
+    for (name, actual) in [
+        (
+            "popular/scan/script-tag",
+            contains(RegexExpr::concat([
+                plain("(?i)<script[^>]*>"),
+                RegexExpr::complement(contains(plain("(?i)</script>"))),
+                plain("(?i)</script>"),
+            ])),
+        ),
+        ("popular/scan/deleted-at-token", {
+            let not_underscore = || class((0..=255u8).filter(|b| *b != b'_'));
+            RegexExpr::concat([
+                RegexExpr::union([
+                    RegexExpr::epsilon(),
+                    RegexExpr::concat([RegexExpr::all(), not_underscore()]),
+                ]),
+                literal(b"deleted_at"),
+                RegexExpr::union([
+                    RegexExpr::epsilon(),
+                    RegexExpr::concat([not_underscore(), RegexExpr::all()]),
+                ]),
+            ])
+        }),
+        ("popular/scan/decimal-point", contains(plain(r"\d\.\S"))),
+        (
+            "popular/scan/attribute-whitespace",
+            contains(plain(r#"["']\s+[^<>\s]+="#)),
+        ),
+        (
+            "popular/validate/password-strength",
+            RegexExpr::intersect([
+                plain(r"[A-Za-z\d@$!%*?&]{8,}"),
+                contains(plain("[a-z]")),
+                contains(plain("[A-Z]")),
+                contains(plain(r"\d")),
+                contains(plain("[@$!%*?&]")),
+            ]),
+        ),
+        (
+            "popular/validate/username-no-symbols-only",
+            RegexExpr::intersect([
+                RegexExpr::complement(plain("[-_]*")),
+                plain("[A-Za-z0-9][A-Za-z0-9_-]{3,20}[A-Za-z0-9]"),
+            ]),
+        ),
+        ("corpus/lookaround", contains(plain(r"\s[A-Z][a-z]+\s"))),
+    ] {
+        translate::equivalent(actual, custom_oracle(name));
+    }
+}
+
 fn popular_scan(criterion: &mut Criterion) {
+    textual_preflight();
     let haystack = popular_haystack();
     let mut workloads = Vec::new();
     for (name, pattern) in [

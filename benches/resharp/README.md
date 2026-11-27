@@ -30,6 +30,16 @@ Only one validator is alive at a time.
 Sampling is Flat, with 20 samples, 500 ms warm-up, and 2 s measurement per engine and workload.
 The benchmark runs on a 64 MiB stack, as originally required for the large corpus translations.
 
+Junco authoring now uses explicit Junco Text v1. `translate.rs` emits text directly
+from byte-mode standard HIR; custom operations build textual expressions, not a
+native DSL tree or a serialization of one. A benchmark-local typed vocabulary
+resolves byte constants and the candidate tag. Parsing/typechecking/lowering
+precede the existing kernel timers. `native_translate.rs` and the custom native
+recipes are untimed independent oracles: short-history/open-domain preflights
+and every real haystack must agree. Original patterns, haystacks, byte-class
+thresholds, anchors and consume-context translations are unchanged.
+Smoke runs use `--test --noplot`; they do not establish new latency conclusions.
+
 ## Credits
 
 [RE#](https://github.com/ieviev/resharp) by Ian Erik Varatalu (MIT), crate `resharp 0.7.6`.

@@ -14,6 +14,9 @@ Junco Text v1: schema-checked named candidate heads and explicit regular languag
 over complete histories. It lowers to the existing typed Rust DSL; its parser and
 host vocabulary are outside the Verus proof boundary. Runnable prior-edit,
 owner/freshness and information-flow examples ship in that crate.
+Committed Junco benchmark policies also use this frontend, including generated
+SMT/byte-regex and stress sources; native DSL fixtures remain untimed oracles.
+Parsing/lowering stay outside the existing engine timers.
 
 ## Check a proposed action
 

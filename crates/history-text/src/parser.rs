@@ -188,6 +188,27 @@ pub fn parse(source: Source<'_>, limits: Limits) -> Result<ParsedPolicy<'_>, Dia
         end: 0,
     };
     limits.validate(span)?;
+    parse_validated(source, limits)
+}
+
+/// Opt-in bounded generated-source parser. Uses explicit work stacks, not a
+/// wider recursive call stack; the original `parse` contract is unchanged.
+pub fn parse_generated(source: Source<'_>, limits: Limits) -> Result<ParsedPolicy<'_>, Diagnostic> {
+    let span = Span {
+        source: source.id,
+        start: 0,
+        end: 0,
+    };
+    limits.validate_for(span, Limits::generated())?;
+    parse_validated(source, limits)
+}
+
+fn parse_validated(source: Source<'_>, limits: Limits) -> Result<ParsedPolicy<'_>, Diagnostic> {
+    let span = Span {
+        source: source.id,
+        start: 0,
+        end: 0,
+    };
     if source.text.len() > limits.source_bytes {
         return Err(Diagnostic::new(
             Code::Limit,
@@ -692,7 +713,7 @@ impl<'a> Parser<'a> {
                 self.expect("forbid")?;
                 RuleMode::Forbid
             };
-            let tail = self.history(0, 0)?;
+            let tail = self.expression()?;
             self.expect(";")?;
             let end = self.expect("}")?.span.end;
             push(
@@ -765,117 +786,192 @@ impl<'a> Parser<'a> {
             Ok(())
         }
     }
-    fn history(&mut self, level: usize, depth: usize) -> Result<usize, Diagnostic> {
-        if level < 3 {
-            let child = self.history(level + 1, depth)?;
-            let (symbol, op) = [("|", Op::Union), ("&", Op::Intersect), (">>", Op::Concat)][level];
-            if self.peek().text != symbol {
-                return Ok(child);
+    fn expression(&mut self) -> Result<usize, Diagnostic> {
+        #[derive(Clone, Copy)]
+        enum Language {
+            History,
+            Predicate,
+        }
+        enum Task {
+            Parse(Language, usize, usize),
+            First(Language, usize, usize),
+            Next(Language, usize, usize, Vec<usize>),
+            Not(Span),
+            CloseParen,
+            Repeat,
+            Event(Span),
+        }
+        fn operator(language: Language, level: usize) -> (&'static str, Op) {
+            match language {
+                Language::History => {
+                    [("|", Op::Union), ("&", Op::Intersect), (">>", Op::Concat)][level]
+                }
+                Language::Predicate => [("or", Op::Or), ("and", Op::And)][level],
             }
-            let mut children = Vec::new();
-            let start = self.nodes[child].span;
-            push(&mut children, child, start)?;
-            while self.eat(symbol) {
-                let next = self.history(level + 1, depth)?;
-                push(&mut children, next, self.nodes[next].span)?;
+        }
+        let mut tasks = Vec::new();
+        let mut values = Vec::new();
+        push(
+            &mut tasks,
+            Task::Parse(Language::History, 0, 0),
+            self.peek().span,
+        )?;
+        while let Some(task) = tasks.pop() {
+            let here = self.peek().span;
+            match task {
+                Task::Parse(language, level, depth) => {
+                    let levels = match language {
+                        Language::History => 3,
+                        Language::Predicate => 2,
+                    };
+                    if level < levels {
+                        push(&mut tasks, Task::First(language, level, depth), here)?;
+                        push(&mut tasks, Task::Parse(language, level + 1, depth), here)?;
+                        continue;
+                    }
+                    self.depth(depth)?;
+                    let token = self.peek();
+                    match language {
+                        Language::History if self.eat("!") => {
+                            push(&mut tasks, Task::Not(token.span), here)?;
+                            push(&mut tasks, Task::Parse(language, level, depth + 1), here)?;
+                        }
+                        Language::History => {
+                            push(&mut tasks, Task::Repeat, here)?;
+                            if self.eat("(") {
+                                push(&mut tasks, Task::CloseParen, here)?;
+                                push(&mut tasks, Task::Parse(language, 0, depth + 1), here)?;
+                            } else if self.eat("event") {
+                                self.expect("{")?;
+                                push(&mut tasks, Task::Event(token.span), here)?;
+                                push(
+                                    &mut tasks,
+                                    Task::Parse(Language::Predicate, 0, depth + 1),
+                                    here,
+                                )?;
+                            } else {
+                                let expr = match self.take().text {
+                                    "all" => Expr::All,
+                                    "empty" => Expr::Empty,
+                                    "epsilon" => Expr::Epsilon,
+                                    _ => {
+                                        return Err(Diagnostic::new(
+                                            Code::UnexpectedToken,
+                                            token.span,
+                                            "expected history expression",
+                                        ));
+                                    }
+                                };
+                                let id = self.node(expr, token.span)?;
+                                push(&mut values, id, here)?;
+                            }
+                        }
+                        Language::Predicate => {
+                            if self.eat("(") {
+                                push(&mut tasks, Task::CloseParen, here)?;
+                                push(&mut tasks, Task::Parse(language, 0, depth + 1), here)?;
+                            } else {
+                                let expr = if self.eat("true") {
+                                    Expr::True
+                                } else if self.eat("false") {
+                                    Expr::False
+                                } else {
+                                    if token.text == "not" {
+                                        return Err(Diagnostic::new(
+                                            Code::Unsupported,
+                                            token.span,
+                                            "use != or whole-history ! outside event",
+                                        ));
+                                    }
+                                    let coordinate = self.name()?;
+                                    let equal = if self.eat("==") {
+                                        true
+                                    } else {
+                                        self.expect("!=")?;
+                                        false
+                                    };
+                                    Expr::Atom(coordinate, equal, self.value(true, true)?)
+                                };
+                                let end = match &expr {
+                                    Expr::Atom(_, _, value) => value.span().end,
+                                    _ => token.span.end,
+                                };
+                                let id = self.node(expr, Span { end, ..token.span })?;
+                                push(&mut values, id, here)?;
+                            }
+                        }
+                    }
+                }
+                Task::First(language, level, depth) => {
+                    let (symbol, _) = operator(language, level);
+                    if self.eat(symbol) {
+                        let child = values.pop().expect("completed child");
+                        let mut children = Vec::new();
+                        push(&mut children, child, here)?;
+                        push(
+                            &mut tasks,
+                            Task::Next(language, level, depth, children),
+                            here,
+                        )?;
+                        push(&mut tasks, Task::Parse(language, level + 1, depth), here)?;
+                    }
+                }
+                Task::Next(language, level, depth, mut children) => {
+                    push(&mut children, values.pop().expect("completed child"), here)?;
+                    let (symbol, op) = operator(language, level);
+                    if self.eat(symbol) {
+                        push(
+                            &mut tasks,
+                            Task::Next(language, level, depth, children),
+                            here,
+                        )?;
+                        push(&mut tasks, Task::Parse(language, level + 1, depth), here)?;
+                    } else {
+                        let span = Span {
+                            end: self.nodes[*children.last().unwrap()].span.end,
+                            ..self.nodes[children[0]].span
+                        };
+                        let id = self.node(Expr::List(op, children), span)?;
+                        push(&mut values, id, here)?;
+                    }
+                }
+                Task::Not(start) => {
+                    let child = values.pop().expect("completed complement");
+                    let id = self.node(
+                        Expr::Unary(Op::Not, child),
+                        Span {
+                            end: self.nodes[child].span.end,
+                            ..start
+                        },
+                    )?;
+                    push(&mut values, id, here)?;
+                }
+                Task::CloseParen => {
+                    self.expect(")")?;
+                }
+                Task::Repeat => {
+                    if self.eat("*") {
+                        let child = values.pop().expect("completed primary");
+                        let id = self.node(
+                            Expr::Unary(Op::Star, child),
+                            Span {
+                                end: self.tokens[self.at - 1].span.end,
+                                ..self.nodes[child].span
+                            },
+                        )?;
+                        push(&mut values, id, here)?;
+                    }
+                }
+                Task::Event(start) => {
+                    let child = values.pop().expect("completed predicate");
+                    let end = self.expect("}")?.span.end;
+                    let id = self.node(Expr::Event(child), Span { end, ..start })?;
+                    push(&mut values, id, here)?;
+                }
             }
-            let end = self.nodes[*children.last().expect("nonempty")].span.end;
-            return self.node(Expr::List(op, children), Span { end, ..start });
         }
-        self.depth(depth)?;
-        if self.eat("!") {
-            let start = self.tokens[self.at - 1].span;
-            let child = self.history(3, depth + 1)?;
-            return self.node(
-                Expr::Unary(Op::Not, child),
-                Span {
-                    end: self.nodes[child].span.end,
-                    ..start
-                },
-            );
-        }
-        let t = self.take();
-        let child = match t.text {
-            "all" => self.node(Expr::All, t.span)?,
-            "empty" => self.node(Expr::Empty, t.span)?,
-            "epsilon" => self.node(Expr::Epsilon, t.span)?,
-            "(" => {
-                let child = self.history(0, depth + 1)?;
-                self.expect(")")?;
-                child
-            }
-            "event" => {
-                self.expect("{")?;
-                let test = self.predicate(0, depth + 1)?;
-                let end = self.expect("}")?.span.end;
-                self.node(Expr::Event(test), Span { end, ..t.span })?
-            }
-            _ => {
-                return Err(Diagnostic::new(
-                    Code::UnexpectedToken,
-                    t.span,
-                    "expected history expression",
-                ));
-            }
-        };
-        if self.eat("*") {
-            self.depth(depth + 1)?;
-            let span = Span {
-                end: self.tokens[self.at - 1].span.end,
-                ..self.nodes[child].span
-            };
-            self.node(Expr::Unary(Op::Star, child), span)
-        } else {
-            Ok(child)
-        }
-    }
-    fn predicate(&mut self, level: usize, depth: usize) -> Result<usize, Diagnostic> {
-        if level < 2 {
-            let child = self.predicate(level + 1, depth)?;
-            let (word, op) = [("or", Op::Or), ("and", Op::And)][level];
-            if self.peek().text != word {
-                return Ok(child);
-            }
-            let start = self.nodes[child].span;
-            let mut children = Vec::new();
-            push(&mut children, child, start)?;
-            while self.eat(word) {
-                let next = self.predicate(level + 1, depth)?;
-                push(&mut children, next, self.nodes[next].span)?;
-            }
-            let end = self.nodes[*children.last().expect("nonempty")].span.end;
-            return self.node(Expr::List(op, children), Span { end, ..start });
-        }
-        self.depth(depth)?;
-        let t = self.peek();
-        if self.eat("(") {
-            let child = self.predicate(0, depth + 1)?;
-            self.expect(")")?;
-            return Ok(child);
-        }
-        if self.eat("true") {
-            return self.node(Expr::True, t.span);
-        }
-        if self.eat("false") {
-            return self.node(Expr::False, t.span);
-        }
-        if t.text == "not" {
-            return Err(Diagnostic::new(
-                Code::Unsupported,
-                t.span,
-                "use != or whole-history ! outside event",
-            ));
-        }
-        let coordinate = self.name()?;
-        let equal = if self.eat("==") {
-            true
-        } else {
-            self.expect("!=")?;
-            false
-        };
-        let value = self.value(true, true)?;
-        let end = value.span().end;
-        self.node(Expr::Atom(coordinate, equal, value), Span { end, ..t.span })
+        assert_eq!(values.len(), 1);
+        Ok(values.pop().unwrap())
     }
 }
 

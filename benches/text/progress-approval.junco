@@ -1,0 +1,11 @@
+junco 1;
+schema "bench.lock/1";
+policy progress {
+ rule approval {
+  candidate { principal: $actor, action: action.release, resource: $resource };
+  require all >> event { resource == $resource and action == action.edit }
+   >> event { resource != $resource or action != action.edit }*
+   >> event { resource == $resource and action == action.remove and principal != $actor }
+   >> event { resource != $resource or action != action.edit }*;
+ }
+}

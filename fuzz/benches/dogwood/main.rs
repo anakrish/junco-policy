@@ -58,6 +58,7 @@ use dogwood_language::{
 };
 use history_store::{History, Store};
 use junco_policy::{Action, LockEvent, LockPolicy};
+use lock_policy_harness::textual_benchmarks;
 use lock_policy_harness::{
     Agent, BYTES_PER_EVENT, BYTES_PER_TRACE, DETERMINISTIC_SEED, MAX_AGENT_NUMBER, MAX_FILE_NUMBER,
     PooledPath, SEEDED_TRACE_COUNT, check, entropy, granted_history, validate_trace,
@@ -216,6 +217,7 @@ struct Dogwood {
 
 impl Dogwood {
     fn lock_policy() -> Self {
+        textual_benchmarks::preflight();
         let service = ServiceSchema::builder()
             .event_schema_str(EVENT_SCHEMA)
             .build()
@@ -484,7 +486,8 @@ impl Junco {
     fn lock_policy() -> Self {
         let store = Arc::new(Store::new().expect("store"));
         Self {
-            policy: LockPolicy::new(Arc::clone(&store)).expect("lock policy compiles"),
+            policy: textual_benchmarks::lock_policy(Arc::clone(&store))
+                .expect("lock policy compiles"),
             store,
         }
     }
@@ -957,7 +960,8 @@ fn deny(criterion: &mut Criterion) {
         let events = &history.as_slice()[..length];
         let prefix = History::from_events(Arc::clone(store), events.iter().copied())
             .expect("benchmark prefix construction failed");
-        let mut policy = LockPolicy::new(Arc::clone(store)).expect("lock policy compiles");
+        let mut policy =
+            textual_benchmarks::lock_policy(Arc::clone(store)).expect("lock policy compiles");
         let candidate = denied_candidate(&mut policy, &prefix)
             .unwrap_or_else(|| panic!("no denied candidate at length {length}"));
         eprintln!("deny {length}: {candidate:?}");
@@ -1084,7 +1088,8 @@ fn deny_cold(criterion: &mut Criterion) {
         let events = &history.as_slice()[..length];
         let prefix = History::from_events(Arc::clone(store), events.iter().copied())
             .expect("benchmark prefix construction failed");
-        let mut policy = LockPolicy::new(Arc::clone(store)).expect("lock policy compiles");
+        let mut policy =
+            textual_benchmarks::lock_policy(Arc::clone(store)).expect("lock policy compiles");
         let candidate = denied_candidate(&mut policy, &prefix)
             .unwrap_or_else(|| panic!("no denied candidate at length {length}"));
         eprintln!("deny_cold {length}: {candidate:?}");

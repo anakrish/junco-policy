@@ -15,6 +15,9 @@ use history_syntax::{
 use junco_core::Request;
 use junco_policy::{Action, LockComponent, LockEvent};
 use std::sync::Arc;
+#[path = "text/mod.rs"]
+#[allow(dead_code)]
+mod text;
 
 /// Benchmark principal identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -43,7 +46,7 @@ fn request(actor: Actor, action: Action, path: Path) -> Request<LockEvent<Actor,
     Request::new(LockEvent::new(actor, action, path), ())
 }
 
-fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
     let actor = format!("actor-{suffix}");
     let target = format!("target-{suffix}");
     let principal = TestExpr::atom(
@@ -75,7 +78,7 @@ fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
     )
 }
 
-fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
+fn native_duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
     let matching_remove = RegexExpr::test(TestExpr::and([
         TestExpr::atom(
             Comparison::Eq,
@@ -110,7 +113,7 @@ fn every_resource_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
     )))
 }
 
-fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(depth > 0, "regex depth must be positive");
     let mut leaves = (0..depth).map(every_resource_leaf);
     let mut tail = leaves.next().expect("positive depth has one leaf");
@@ -148,7 +151,7 @@ fn every_event_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
     )))
 }
 
-fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(depth > 0, "regex depth must be positive");
     let mut leaves = (0..depth).map(every_event_leaf);
     let mut tail = leaves.next().expect("positive depth has one leaf");
@@ -172,7 +175,7 @@ fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
     )
 }
 
-fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
     let factors = (0..steps).map(|index| {
         RegexExpr::union([
             RegexExpr::epsilon(),
@@ -204,7 +207,7 @@ fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
 /// read. A shorter all-read history keeps adding candidate suffixes without reaching a terminal
 /// residual. The full DFA has exponentially many states even though this measured path grows
 /// linearly.
-fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
     assert!(window > 0, "residual-growth window must be positive");
     let any_event = RegexExpr::test(TestExpr::true_test());
     let read = RegexExpr::test(TestExpr::atom(
@@ -229,7 +232,7 @@ fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
 }
 
 /// One unique absent-witness rule that forces a complete nonterminal history scan.
-fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
+fn native_absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
     let absent = RegexExpr::test(TestExpr::atom(
         Comparison::Eq,
         AtomPattern::new(
@@ -246,6 +249,134 @@ fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
         ]),
         RegexExpr::concat([RegexExpr::all(), absent, RegexExpr::all()]),
     )
+}
+
+fn authored(name: &str, mode: &str, action: &str, tail: &str) -> Rule<LockEvent<Actor, Path>> {
+    text::lock_rule(&text::lock_document(name, mode, action, tail), Actor, Path)
+}
+
+fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
+    // Terminal witness: unlike the README example, no trailing `all`.
+    authored(
+        &format!("prior_edit_{suffix}"),
+        "require",
+        "release",
+        "all >> event { principal == $actor and action == action.edit and resource == $target }",
+    )
+}
+fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
+    authored(
+        "duplicate_remove",
+        "forbid",
+        "remove",
+        "all >> event { action == action.remove and resource == $target } >> all",
+    )
+}
+fn nested(depth: usize, coordinate: &str) -> Rule<LockEvent<Actor, Path>> {
+    assert!(depth > 0);
+    let leaf = |index| format!("event {{ {coordinate} != {} }}*", ABSENT_IDS + index as u32);
+    let mut tail = leaf(0);
+    for index in 1..depth {
+        let op = if (index - 1) % 2 == 0 { "|" } else { "&" };
+        tail = format!("({tail} {op} {})", leaf(index));
+    }
+    authored("nested", "require", "release", &tail)
+}
+fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+    nested(depth, "principal")
+}
+fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+    nested(depth, "resource")
+}
+fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
+    authored(
+        "optional",
+        "require",
+        "release",
+        &text::concat((0..steps).map(|index| {
+            format!(
+                "(epsilon | event {{ resource != {} }})",
+                ABSENT_IDS + index as u32
+            )
+        })),
+    )
+}
+fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
+    assert!(window > 0);
+    authored(
+        "growing",
+        "forbid",
+        "release",
+        &text::concat(
+            ["all".into(), "event { action == action.read }".into()]
+                .into_iter()
+                .chain(std::iter::repeat_n("event { true }".to_owned(), window + 1)),
+        ),
+    )
+}
+fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
+    authored(
+        &format!("absent_{index}"),
+        "forbid",
+        "release",
+        &format!(
+            "all >> event {{ principal == {} }} >> all",
+            ABSENT_IDS + index as u32
+        ),
+    )
+}
+
+/// Untimed independent DSL oracle covering every synthetic fixture family.
+pub fn textual_preflight() {
+    use history_semantics::CompiledRule;
+    use history_store::History;
+    let pairs = [
+        (prior_edit_rule(0), native_prior_edit_rule(0)),
+        (duplicate_remove_rule(), native_duplicate_remove_rule()),
+        (
+            deeply_nested_allow_all_rule(32),
+            native_deeply_nested_allow_all_rule(32),
+        ),
+        (
+            deeply_nested_resource_allow_all_rule(32),
+            native_deeply_nested_resource_allow_all_rule(32),
+        ),
+        (
+            advancing_optional_rule(16),
+            native_advancing_optional_rule(16),
+        ),
+        (growing_residual_rule(64), native_growing_residual_rule(64)),
+        (absent_witness_rule(1023), native_absent_witness_rule(1023)),
+    ];
+    let alphabet = [
+        LockEvent::new(ALICE, Action::Edit, ROOT),
+        LockEvent::new(ALICE, Action::Read, ROOT),
+        LockEvent::new(ALICE, Action::Remove, ROOT),
+        LockEvent::new(HISTORY, Action::Release, ROOT),
+        LockEvent::new(Actor(ABSENT_IDS), Action::Read, Path(ABSENT_IDS)),
+    ];
+    for (actual, expected) in pairs {
+        let store = Arc::new(Store::new().unwrap());
+        let mut actual = CompiledRule::new(store.clone(), actual).unwrap();
+        let mut expected = CompiledRule::new(store.clone(), expected).unwrap();
+        for length in 0..=3 {
+            for mut word in 0..alphabet.len().pow(length) {
+                let events = (0..length).map(|_| {
+                    let event = alphabet[word % alphabet.len()];
+                    word /= alphabet.len();
+                    event
+                });
+                let history = History::from_events(store.clone(), events).unwrap();
+                for action in [Action::Release, Action::Remove, Action::Read] {
+                    let candidate = LockEvent::new(ALICE, action, ROOT);
+                    assert_eq!(
+                        actual.accepts_history(&history, &candidate).unwrap(),
+                        expected.accepts_history(&history, &candidate).unwrap()
+                    );
+                }
+            }
+        }
+    }
 }
 
 // The matching Require rule forces all one million committed events through the depth-32 tail.
@@ -368,14 +499,15 @@ fn benchmark_growing_residual_stress(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(3))
         .sample_size(10);
     for window in [4_usize, 8, 12] {
+        let source = growing_residual_rule(window);
         compile.bench_with_input(
             BenchmarkId::from_parameter(window),
             &window,
-            |bencher, &window| {
+            |bencher, _| {
                 bencher.iter_custom(|iterations| {
                     let mut elapsed = Duration::ZERO;
                     for _ in 0..iterations {
-                        let source = growing_residual_rule(window);
+                        let source = source.clone();
                         let store = Arc::new(Store::new().unwrap());
                         let start = Instant::now();
                         let mut builder = Validator::builder(Arc::clone(&store));
@@ -445,14 +577,15 @@ fn benchmark_many_rules_stress(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(3))
         .sample_size(10);
     for rule_count in RULE_COUNTS {
+        let rules = (0..rule_count).map(absent_witness_rule).collect::<Vec<_>>();
         compile.bench_with_input(
             BenchmarkId::from_parameter(rule_count),
             &rule_count,
-            |bencher, &rule_count| {
+            |bencher, _| {
                 bencher.iter_custom(|iterations| {
                     let mut elapsed = Duration::ZERO;
                     for _ in 0..iterations {
-                        let rules = (0..rule_count).map(absent_witness_rule).collect::<Vec<_>>();
+                        let rules = rules.clone();
                         let store = Arc::new(Store::new().unwrap());
                         let start = Instant::now();
                         let mut builder = Validator::builder(Arc::clone(&store));
@@ -521,32 +654,29 @@ fn benchmark_many_rules_stress(criterion: &mut Criterion) {
 }
 
 fn benchmark_compilation(criterion: &mut Criterion) {
+    textual_preflight();
     let mut group = criterion.benchmark_group("compile_rules");
     for count in [1_usize, 16, 64] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(count),
-            &count,
-            |bencher, &count| {
-                bencher.iter_custom(|iterations| {
-                    let mut elapsed = Duration::ZERO;
-                    for _ in 0..iterations {
-                        let rules: Vec<Rule<LockEvent<Actor, Path>>> =
-                            (0..count).map(prior_edit_rule).collect();
-                        let store = Arc::new(Store::new().unwrap());
-                        let start = Instant::now();
-                        let mut builder = Validator::builder(Arc::clone(&store));
-                        for rule in rules {
-                            builder.add_rule(rule).expect("benchmark rule is valid");
-                        }
-                        let validator = builder.finish().unwrap();
-                        black_box(&validator);
-                        elapsed += start.elapsed();
-                        drop(validator);
+        let rules = (0..count).map(prior_edit_rule).collect::<Vec<_>>();
+        group.bench_with_input(BenchmarkId::from_parameter(count), &count, |bencher, _| {
+            bencher.iter_custom(|iterations| {
+                let mut elapsed = Duration::ZERO;
+                for _ in 0..iterations {
+                    let rules = rules.clone();
+                    let store = Arc::new(Store::new().unwrap());
+                    let start = Instant::now();
+                    let mut builder = Validator::builder(Arc::clone(&store));
+                    for rule in rules {
+                        builder.add_rule(rule).expect("benchmark rule is valid");
                     }
-                    elapsed
-                });
-            },
-        );
+                    let validator = builder.finish().unwrap();
+                    black_box(&validator);
+                    elapsed += start.elapsed();
+                    drop(validator);
+                }
+                elapsed
+            });
+        });
     }
     group.finish();
 }
@@ -625,6 +755,13 @@ fn benchmark_denial(criterion: &mut Criterion) {
 fn benchmark_rollback(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("rollback");
     for removed_events in [1_usize, 64, 1024] {
+        let rules: Vec<Rule<LockEvent<Actor, Path>>> = text::load(
+            "junco 1; schema \"bench.lock/1\"; policy empty_policy {}",
+            &text::LockVocabulary {
+                principal: Actor,
+                resource: Path,
+            },
+        );
         let store = Arc::new(Store::new().unwrap());
         group.bench_with_input(
             BenchmarkId::from_parameter(removed_events),
@@ -632,8 +769,11 @@ fn benchmark_rollback(criterion: &mut Criterion) {
             |bencher, &removed_events| {
                 bencher.iter_batched(
                     || {
-                        let mut validator =
-                            Validator::builder(Arc::clone(&store)).finish().unwrap();
+                        let mut builder = Validator::builder(Arc::clone(&store));
+                        for rule in rules.clone() {
+                            builder.add_rule(rule).unwrap();
+                        }
+                        let mut validator = builder.finish().unwrap();
                         let checkpoint = validator.checkpoint();
                         for _ in 0..removed_events {
                             let decision =

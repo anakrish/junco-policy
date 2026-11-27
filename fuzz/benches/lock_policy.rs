@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, PlottingBackend, criterion_group, criterion_main};
 use history_store::History;
-use junco_policy::LockPolicy;
+use lock_policy_harness::textual_benchmarks;
 use lock_policy_harness::{BYTES_PER_EVENT, check, entropy, granted_history, probe_candidates};
 
 /// Committed history lengths measured; geometric, so the growth rate reads off directly.
@@ -21,6 +21,7 @@ const LENGTHS: [usize; 6] = [0, 4, 16, 64, 256, 1024];
 const SEED: u64 = 0x9e37_79b9_7f4a_7c15;
 
 fn lock_decision_scaling(criterion: &mut Criterion) {
+    textual_benchmarks::preflight();
     let longest = LENGTHS[LENGTHS.len() - 1];
     let history = granted_history(&entropy(SEED, longest * BYTES_PER_EVENT), longest)
         .expect("benchmark history generation failed");
@@ -33,8 +34,8 @@ fn lock_decision_scaling(criterion: &mut Criterion) {
         .expect("benchmark prefix construction failed")
     });
     let probes = probe_candidates();
-    let mut verdict_policy =
-        LockPolicy::new(Arc::clone(store)).expect("benchmark policy compilation failed");
+    let mut verdict_policy = textual_benchmarks::lock_policy(Arc::clone(store))
+        .expect("benchmark policy compilation failed");
 
     // The verdict decides how much work a check does — a denial returns from the compiled policy
     // early — so print it once per measured point; timings are uninterpretable without it.
@@ -57,8 +58,8 @@ fn lock_decision_scaling(criterion: &mut Criterion) {
     group.sample_size(50);
     for (name, candidate) in &probes {
         for (length, prefix) in LENGTHS.iter().zip(&prefixes) {
-            let mut policy =
-                LockPolicy::new(Arc::clone(store)).expect("benchmark policy compilation failed");
+            let mut policy = textual_benchmarks::lock_policy(Arc::clone(store))
+                .expect("benchmark policy compilation failed");
             group.bench_with_input(BenchmarkId::new(*name, length), prefix, |bencher, trace| {
                 bencher.iter(|| {
                     check(&mut policy, black_box(trace), black_box(candidate))

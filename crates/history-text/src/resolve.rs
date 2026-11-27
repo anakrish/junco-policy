@@ -56,16 +56,30 @@ pub struct Entry<E: Event> {
 pub struct TypedPolicy<E: Event> {
     pub name: String,
     pub span: Span,
-    entries: Vec<Entry<E>>,
+    entries: Entries<E>,
+}
+#[derive(Debug)]
+struct Entries<E: Event>(Vec<Entry<E>>);
+impl<E: Event> Entries<E> {
+    fn into_iter(mut self) -> alloc::vec::IntoIter<Entry<E>> {
+        core::mem::take(&mut self.0).into_iter()
+    }
 }
 impl<E: Event> TypedPolicy<E> {
     /// Rules in source order; a satisfied rule is not an early grant.
     pub fn entries(&self) -> &[Entry<E>] {
-        &self.entries
+        &self.entries.0
     }
     /// Consume into existing compiler/validator integrations.
     pub fn into_entries(self) -> alloc::vec::IntoIter<Entry<E>> {
         self.entries.into_iter()
+    }
+}
+impl<E: Event> Drop for Entries<E> {
+    fn drop(&mut self) {
+        for entry in self.0.drain(..) {
+            entry.rule.dispose();
+        }
     }
 }
 
@@ -130,7 +144,11 @@ pub fn lower<E: Event, R: Resolver<E>>(
             constant.name.span,
         )?;
     }
-    let mut entries = Vec::new();
+    let mut result = TypedPolicy {
+        name: owned(parsed.name, parsed.span)?,
+        span: parsed.span,
+        entries: Entries(Vec::new()),
+    };
     for rule in &parsed.rules {
         if rule.fields.len() != arity {
             return Err(Diagnostic::new(
@@ -201,13 +219,19 @@ pub fn lower<E: Event, R: Resolver<E>>(
             scope: &scope,
             bindings: &bindings,
         };
+        let name = owned(rule.name.text, rule.name.span)?;
+        result
+            .entries
+            .0
+            .try_reserve(1)
+            .map_err(|_| Diagnostic::new(Code::Allocation, rule.span, "allocation failed"))?;
         let tail = context.regex(rule.tail, &mut origins)?;
         push(
-            &mut entries,
+            &mut result.entries.0,
             Entry {
                 rule: Rule::new(rule.mode, Head::new(head), tail),
                 info: RuleInfo {
-                    name: owned(rule.name.text, rule.name.span)?,
+                    name,
                     span: rule.span,
                     head_span: rule.head_span,
                     origins,
@@ -216,11 +240,7 @@ pub fn lower<E: Event, R: Resolver<E>>(
             rule.span,
         )?;
     }
-    Ok(TypedPolicy {
-        name: owned(parsed.name, parsed.span)?,
-        span: parsed.span,
-        entries,
-    })
+    Ok(result)
 }
 
 fn coordinate(vocabulary: Vocabulary<'_>, name: Name<'_>) -> Result<Component, Diagnostic> {
@@ -351,104 +371,128 @@ impl<E: Event, R: Resolver<E>> Context<'_, '_, E, R> {
         id: usize,
         origins: &mut Vec<Span>,
     ) -> Result<RegexExpr<E>, LowerError<R::Error>> {
-        let node = &self.parsed.nodes[id];
-        push(origins, node.span, node.span)?;
-        Ok(match &node.expr {
-            Expr::All => RegexExpr::All,
-            Expr::Empty => RegexExpr::Empty,
-            Expr::Epsilon => RegexExpr::Epsilon,
-            Expr::Event(child) => RegexExpr::Test(self.test(*child, origins)?),
-            Expr::Unary(op, child) => {
-                let child = self.regex(*child, origins)?;
-                match op {
-                    Op::Star => RegexExpr::star(child),
-                    Op::Not => RegexExpr::complement(child),
-                    _ => {
-                        return Err(Diagnostic::new(
-                            Code::Adapter,
-                            node.span,
-                            "invalid internal history operator",
-                        )
-                        .into());
+        enum Value<E: Event> {
+            Regex(RegexExpr<E>),
+            Test(TestExpr<E>),
+        }
+        struct Values<E: Event>(Vec<Value<E>>);
+        impl<E: Event> Drop for Values<E> {
+            fn drop(&mut self) {
+                for value in self.0.drain(..) {
+                    let tail = match value {
+                        Value::Regex(r) => r,
+                        Value::Test(t) => RegexExpr::Test(t),
+                    };
+                    Rule::new(history_syntax::RuleMode::Require, Head::new([]), tail).dispose();
+                }
+            }
+        }
+        let span = self.parsed.nodes[id].span;
+        let mut work = Vec::new();
+        let mut values = Values(Vec::new());
+        push(&mut work, (id, false), span)?;
+        while let Some((id, build)) = work.pop() {
+            let node = &self.parsed.nodes[id];
+            if !build {
+                push(origins, node.span, node.span)?;
+                push(&mut work, (id, true), node.span)?;
+                match &node.expr {
+                    Expr::Event(child) | Expr::Unary(_, child) => {
+                        push(&mut work, (*child, false), node.span)?
                     }
-                }
-            }
-            Expr::List(op, children) => {
-                let mut values = Vec::new();
-                for &child in children {
-                    push(&mut values, self.regex(child, origins)?, node.span)?;
-                }
-                match op {
-                    Op::Union => RegexExpr::Union(values),
-                    Op::Intersect => RegexExpr::Intersect(values),
-                    Op::Concat => RegexExpr::Concat(values),
-                    _ => {
-                        return Err(Diagnostic::new(
-                            Code::Adapter,
-                            node.span,
-                            "invalid internal history list",
-                        )
-                        .into());
+                    Expr::List(_, children) => {
+                        for &child in children.iter().rev() {
+                            push(&mut work, (child, false), node.span)?;
+                        }
                     }
+                    _ => {}
                 }
+                continue;
             }
-            _ => {
-                return Err(Diagnostic::new(
-                    Code::Adapter,
-                    node.span,
-                    "predicate used as history internally",
-                )
-                .into());
-            }
-        })
-    }
-    fn test(
-        &self,
-        id: usize,
-        origins: &mut Vec<Span>,
-    ) -> Result<TestExpr<E>, LowerError<R::Error>> {
-        let node = &self.parsed.nodes[id];
-        push(origins, node.span, node.span)?;
-        Ok(match &node.expr {
-            Expr::True => TestExpr::True,
-            Expr::False => TestExpr::False,
-            Expr::Atom(name, equal, value) => {
-                let coordinate = coordinate(self.vocabulary, *name)?;
-                TestExpr::atom(
-                    if *equal {
-                        Comparison::Eq
-                    } else {
-                        Comparison::Neq
-                    },
-                    AtomPattern::new(coordinate, self.pattern(value, coordinate)?),
-                )
-            }
-            Expr::List(op, children) => {
-                let mut values = Vec::new();
-                for &child in children {
-                    push(&mut values, self.test(child, origins)?, node.span)?;
+            values
+                .0
+                .try_reserve(1)
+                .map_err(|_| Diagnostic::new(Code::Allocation, node.span, "allocation failed"))?;
+            let value = match &node.expr {
+                Expr::All => Value::Regex(RegexExpr::All),
+                Expr::Empty => Value::Regex(RegexExpr::Empty),
+                Expr::Epsilon => Value::Regex(RegexExpr::Epsilon),
+                Expr::True => Value::Test(TestExpr::True),
+                Expr::False => Value::Test(TestExpr::False),
+                Expr::Atom(name, equal, value) => {
+                    let coordinate = coordinate(self.vocabulary, *name)?;
+                    Value::Test(TestExpr::atom(
+                        if *equal {
+                            Comparison::Eq
+                        } else {
+                            Comparison::Neq
+                        },
+                        AtomPattern::new(coordinate, self.pattern(value, coordinate)?),
+                    ))
                 }
-                match op {
-                    Op::And => TestExpr::And(values),
-                    Op::Or => TestExpr::Or(values),
-                    _ => {
-                        return Err(Diagnostic::new(
-                            Code::Adapter,
-                            node.span,
-                            "invalid internal predicate operator",
-                        )
-                        .into());
+                Expr::Event(_) => {
+                    let Value::Test(test) = values.0.pop().expect("postorder predicate") else {
+                        unreachable!("private typed syntax")
+                    };
+                    Value::Regex(RegexExpr::Test(test))
+                }
+                Expr::Unary(op, _) => {
+                    let Value::Regex(regex) = values.0.pop().expect("postorder history") else {
+                        unreachable!("private typed syntax")
+                    };
+                    Value::Regex(match op {
+                        Op::Star => RegexExpr::star(regex),
+                        Op::Not => RegexExpr::complement(regex),
+                        _ => unreachable!("private unary syntax"),
+                    })
+                }
+                Expr::List(op, children) => match op {
+                    Op::And | Op::Or => {
+                        let mut tests = Vec::new();
+                        tests.try_reserve_exact(children.len()).map_err(|_| {
+                            Diagnostic::new(Code::Allocation, node.span, "allocation failed")
+                        })?;
+                        for _ in children {
+                            let Value::Test(test) = values.0.pop().expect("postorder predicate")
+                            else {
+                                unreachable!("private typed syntax")
+                            };
+                            tests.push(test);
+                        }
+                        tests.reverse();
+                        Value::Test(if matches!(op, Op::And) {
+                            TestExpr::And(tests)
+                        } else {
+                            TestExpr::Or(tests)
+                        })
                     }
-                }
-            }
-            _ => {
-                return Err(Diagnostic::new(
-                    Code::Adapter,
-                    node.span,
-                    "history used as predicate internally",
-                )
-                .into());
-            }
-        })
+                    Op::Union | Op::Intersect | Op::Concat => {
+                        let mut regexes = Vec::new();
+                        regexes.try_reserve_exact(children.len()).map_err(|_| {
+                            Diagnostic::new(Code::Allocation, node.span, "allocation failed")
+                        })?;
+                        for _ in children {
+                            let Value::Regex(regex) = values.0.pop().expect("postorder history")
+                            else {
+                                unreachable!("private typed syntax")
+                            };
+                            regexes.push(regex);
+                        }
+                        regexes.reverse();
+                        Value::Regex(match op {
+                            Op::Union => RegexExpr::Union(regexes),
+                            Op::Intersect => RegexExpr::Intersect(regexes),
+                            _ => RegexExpr::Concat(regexes),
+                        })
+                    }
+                    _ => unreachable!("private list syntax"),
+                },
+            };
+            values.0.push(value);
+        }
+        let Value::Regex(regex) = values.0.pop().expect("completed history") else {
+            unreachable!("private typed syntax")
+        };
+        Ok(regex)
     }
 }

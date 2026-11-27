@@ -6,6 +6,31 @@ use history_text::{
 };
 use support::*;
 
+#[test]
+fn generated_depth_and_rule_limits_use_bounded_work_stacks() {
+    std::thread::Builder::new().stack_size(64 << 10).spawn(|| {
+        let text = rule(&format!("{}all", "!".repeat(300)));
+        assert_eq!(parse(source(&text), Limits::default()).unwrap_err().code, Code::Limit);
+        let parsed = history_text::parse_generated(source(&text), Limits::generated()).unwrap();
+        let typed = lower::<Lock,_>(&parsed,&LockVocabulary).unwrap();
+        drop(typed);
+        let mut text = String::from("junco 1; schema \"lock/1\"; policy p {");
+        for index in 0..1024 {
+            text.push_str(&format!("rule r{index} {{ candidate {{ principal: $p, action: $a, resource: $r }}; forbid empty; }}"));
+        }
+        text.push('}');
+        let parsed=history_text::parse_generated(source(&text),Limits::generated()).unwrap();
+        assert_eq!(lower::<Lock,_>(&parsed,&LockVocabulary).unwrap().entries().len(),1024);
+        assert_eq!(history_text::parse_generated(source(&text),Limits { rules: 1023,..Limits::generated() }).unwrap_err().code,Code::Limit);
+        let text = rule(&format!("{}all","!".repeat(512)));
+        assert_eq!(history_text::parse_generated(source(&text),Limits::generated()).unwrap_err().code,Code::Limit);
+        let text = rule(&format!("{}all","!".repeat(511)));
+        let parsed=history_text::parse_generated(source(&text),Limits::generated()).unwrap();
+        drop(lower::<Lock,_>(&parsed,&LockVocabulary).unwrap());
+        assert_eq!(history_text::parse_generated(source(&text),Limits { nesting: 513,..Limits::generated() }).unwrap_err().code,Code::Limit);
+    }).unwrap().join().unwrap();
+}
+
 fn source(text: &str) -> Source<'_> {
     Source {
         id: SourceId(9),

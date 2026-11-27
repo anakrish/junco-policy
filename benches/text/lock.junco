@@ -1,0 +1,41 @@
+junco 1;
+schema "bench.lock/1";
+policy lock {
+ rule owner_edit {
+  candidate { principal: $p, action: action.edit, resource: $r };
+  forbid all >> event { resource == $r and action == action.edit and principal != $p }
+   >> event { resource != $r or (action != action.edit and action != action.release and action != action.remove) }*;
+ }
+ rule owner_release {
+  candidate { principal: $p, action: action.release, resource: $r };
+  forbid all >> event { resource == $r and action == action.edit and principal != $p }
+   >> event { resource != $r or (action != action.edit and action != action.release and action != action.remove) }*;
+ }
+ rule owner_remove {
+  candidate { principal: $p, action: action.remove, resource: $r };
+  forbid all >> event { resource == $r and action == action.edit and principal != $p }
+   >> event { resource != $r or (action != action.edit and action != action.release and action != action.remove) }*;
+ }
+ rule stale_edit {
+  candidate { principal: $p, action: action.edit, resource: $r };
+  forbid all >> event { resource == $r and action == action.edit and principal != $p }
+   >> event { (resource != $r or (action != action.edit and action != action.remove))
+       and (resource != $r or action != action.read or principal != $p) }*;
+ }
+ rule stale_remove {
+  candidate { principal: $p, action: action.remove, resource: $r };
+  forbid all >> event { resource == $r and action == action.edit and principal != $p }
+   >> event { (resource != $r or (action != action.edit and action != action.remove))
+       and (resource != $r or action != action.read or principal != $p) }*;
+ }
+ rule reader_edit {
+  candidate { principal: $p, action: action.edit, resource: $r };
+  forbid all >> event { resource == $r and action == action.read and principal != $p }
+   >> event { resource != $r or (action != action.read and action != action.remove) }*;
+ }
+ rule reader_remove {
+  candidate { principal: $p, action: action.remove, resource: $r };
+  forbid all >> event { resource == $r and action == action.read and principal != $p }
+   >> event { resource != $r or (action != action.read and action != action.remove) }*;
+ }
+}

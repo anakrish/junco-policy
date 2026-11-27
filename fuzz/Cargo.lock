@@ -836,6 +836,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "history-text"
+version = "0.1.0"
+dependencies = [
+ "history-semantics",
+ "history-store",
+ "history-syntax",
+ "junco-core",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1032,6 +1042,7 @@ dependencies = [
  "history-semantics",
  "history-store",
  "history-syntax",
+ "history-text",
  "junco-core",
  "junco-policy",
  "libfuzzer-sys",

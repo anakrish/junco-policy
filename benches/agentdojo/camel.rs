@@ -7,7 +7,12 @@ use std::time::{Duration, Instant};
 
 use history_semantics::PolicyDecision;
 use history_store::{History, Store};
-use junco_policy::{FlowAction, FlowEvent, FlowPolicy, FlowRule};
+use history_syntax::Component;
+use history_text::{CoordinateSpec, Literal, Resolver, Vocabulary};
+use junco_policy::{FlowAction, FlowComponent, FlowEvent, FlowPolicy, FlowRule};
+#[path = "../text/mod.rs"]
+#[allow(dead_code)]
+mod text;
 use rig_core::completion::{CompletionRequest, CompletionResponse, ToolDefinition};
 use rig_core::http_client::DynHttpClient;
 use rig_core::message::{Message, ToolChoice, ToolName, ToolResultContent};
@@ -208,7 +213,7 @@ impl FromStr for Agent {
 
 pub type CamelEvent = FlowEvent<Agent, Handle, Class>;
 
-pub fn camel_policy() -> FlowPolicy<Agent, Handle, Class> {
+pub fn native_camel_policy() -> FlowPolicy<Agent, Handle, Class> {
     FlowPolicy::new()
         .rule(FlowRule::no_contact_after_read(
             Class::Untrusted,
@@ -219,6 +224,148 @@ pub fn camel_policy() -> FlowPolicy<Agent, Handle, Class> {
             &[Class::Peer],
         ))
         .audit()
+}
+
+struct CamelVocabulary;
+const COORDINATES: [CoordinateSpec<'static>; 4] = [
+    CoordinateSpec {
+        name: "principal",
+        domain: "camel-agent",
+        literals: text::SYMBOLS,
+    },
+    CoordinateSpec {
+        name: "handle",
+        domain: "camel-handle",
+        literals: text::IDS,
+    },
+    CoordinateSpec {
+        name: "action",
+        domain: "flow-action",
+        literals: text::SYMBOLS,
+    },
+    CoordinateSpec {
+        name: "label",
+        domain: "camel-class",
+        literals: text::SYMBOLS,
+    },
+];
+impl Resolver<CamelEvent> for CamelVocabulary {
+    type Error = &'static str;
+    fn vocabulary(&self) -> Vocabulary<'_> {
+        Vocabulary {
+            id: "bench.camel/1",
+            coordinates: &COORDINATES,
+        }
+    }
+    fn resolve(
+        &self,
+        coordinate: Component,
+        literal: Literal<'_>,
+    ) -> Result<FlowComponent<Agent, Handle, Class>, Self::Error> {
+        match (coordinate.index(), literal) {
+            (0, Literal::Symbol("P")) => Ok(FlowComponent::Principal(Agent::P)),
+            (0, Literal::Symbol("Q")) => Ok(FlowComponent::Principal(Agent::Q)),
+            (1, Literal::Integer(s)) => Ok(FlowComponent::Handle(Handle(
+                s.parse().map_err(|_| "invalid handle")?,
+            ))),
+            (2, Literal::Symbol(s)) => Ok(FlowComponent::Action(match s {
+                "read" => FlowAction::Read,
+                "receive" => FlowAction::Receive,
+                "contact" => FlowAction::Contact,
+                "declassify" => FlowAction::Declassify,
+                _ => return Err("unknown flow action"),
+            })),
+            (3, Literal::Symbol(s)) => Ok(FlowComponent::Label(match s {
+                "trusted" => Class::Trusted,
+                "untrusted" => Class::Untrusted,
+                "private" => Class::Private,
+                "sink" => Class::Sink,
+                "peer" => Class::Peer,
+                _ => return Err("unknown class"),
+            })),
+            _ => Err("unsupported camel value"),
+        }
+    }
+}
+pub fn camel_policy() -> FlowPolicy<Agent, Handle, Class> {
+    let mut rules = text::load(include_str!("flow.junco"), &CamelVocabulary).into_iter();
+    let untrusted = rules.next().expect("untrusted rule");
+    let private = rules.next().expect("private rule");
+    assert!(rules.next().is_none());
+    FlowPolicy::new()
+        .rule(FlowRule::no_contact_with_source(
+            Class::Untrusted,
+            Class::Sink,
+            untrusted,
+        ))
+        .rule(FlowRule::no_contact_with_source(
+            Class::Private,
+            Class::Peer,
+            private,
+        ))
+        .audit()
+}
+
+pub fn textual_preflight() {
+    fn observed(decision: &PolicyDecision) -> Option<(String, Vec<String>)> {
+        match decision {
+            PolicyDecision::Grant => None,
+            PolicyDecision::Deny {
+                failed_precondition,
+                allowed_fixes,
+            } => Some((failed_precondition.clone(), allowed_fixes.clone())),
+        }
+    }
+    let actual = camel_policy();
+    let expected = native_camel_policy();
+    let store = Arc::new(Store::new().unwrap());
+    let event = |principal, handle, action, label| CamelEvent {
+        principal,
+        handle,
+        action,
+        label,
+    };
+    let alphabet = [
+        event(Agent::P, Handle(0), FlowAction::Read, Class::Untrusted),
+        event(Agent::P, Handle(0), FlowAction::Receive, Class::Private),
+        event(
+            Agent::P,
+            Handle(0),
+            FlowAction::Declassify,
+            Class::Untrusted,
+        ),
+        event(
+            Agent::Q,
+            Handle(0),
+            FlowAction::Declassify,
+            Class::Untrusted,
+        ),
+        event(Agent::P, Handle(1), FlowAction::Declassify, Class::Private),
+        event(Agent::P, Handle(0), FlowAction::Declassify, Class::Private),
+    ];
+    for length in 0..=3 {
+        for mut word in 0..alphabet.len().pow(length) {
+            let events = (0..length)
+                .map(|_| {
+                    let e = alphabet[word % alphabet.len()];
+                    word /= alphabet.len();
+                    e
+                })
+                .collect::<Vec<_>>();
+            for label in [Class::Sink, Class::Peer] {
+                let candidate = event(Agent::P, Handle(0), FlowAction::Contact, label);
+                let mut a = History::from_events(store.clone(), events.iter().copied()).unwrap();
+                let mut b = History::from_events(store.clone(), events.iter().copied()).unwrap();
+                let (mut da, mut db) = (Vec::new(), Vec::new());
+                assert_eq!(
+                    actual.check(&mut a, &[candidate], |e, d| da.push((*e, observed(d)))),
+                    expected.check(&mut b, &[candidate], |e, d| db.push((*e, observed(d))))
+                );
+                assert_eq!(da, db);
+                assert_eq!(a.as_slice(), b.as_slice());
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]

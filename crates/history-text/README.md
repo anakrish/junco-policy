@@ -100,12 +100,12 @@ CRLF-aware lines without a line table. Success consumes EOF; no partial policy
 is returned. Rule metadata retains head-field, atom and operator expression
 ranges, not a normalized engine-node-to-text map or history witness.
 
-Limits default to, and cannot exceed: 1 MiB source, 65,536 tokens, 128-byte
+Ordinary `parse` limits default to, and cannot exceed: 1 MiB source, 65,536 tokens, 128-byte
 identifiers, 4096-byte raw/decoded literals, nesting/tree height 64, 32,768
 expression nodes, 256 rules, 1024 constants. All can be lowered, including to
 zero. Source is checked before allocation. Tokens and names borrow source;
 strings are validated and counted before decoding. Collections use fallible
-reservation. An arena bounds construction; recursion is explicitly bounded
+reservation. An arena and explicit parsing/lowering work stacks bound construction
 both syntactically and by emitted tree height. Infix chains do not become deep
 binary trees. There are no expansions or shared expression references; emitted
 node and edge counts are bounded by parsed nodes/tokens. Names and spans copied
@@ -125,3 +125,23 @@ evidence, not a parser correctness proof. Text version 1 is independent of
 portable wire-format version 9. Serialization, round-tripping, rich owner-name
 explanations, propagation of receive events, and other deferred language
 features are caller responsibilities.
+
+### Generated benchmark corpora
+
+`parse_generated(source, Limits::generated())` is an explicit opt-in to a
+512-level nesting/tree ceiling and 1024 rules. All other ceilings and all v1
+syntax/semantics stay unchanged; ordinary `parse` still rejects larger limits.
+This covers the committed SMT nested optional-repeat corpus without flattening
+alternating operators or changing regex meaning. Both predicates and history
+expressions are parsed and lowered iteratively. Dropping a `TypedPolicy`, or
+completed entries on a lowering failure, uses the existing iterative
+`Rule::dispose`; consumers taking ownership of raw DSL rules retain the DSL's
+normal disposal obligations. Host callbacks and engine allocation limits remain
+independent. These larger bounds do not add counted repetition, macros, queries
+or parser proof claims.
+
+The root/fuzz benchmark ports use benchmark-local typed vocabularies and
+authoritative policy files or generated explicit text. Native DSL factories
+remain only as untimed independent semantic/diagnostic oracles. Parsing and
+lowering are outside the original kernel compilation/evaluation timers;
+Criterion `--test` preflights make no latency claims.

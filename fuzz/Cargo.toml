@@ -24,6 +24,7 @@ junco-core = { path = "../crates/junco-core", default-features = false, features
 history-store = { path = "../crates/history-store", default-features = false, features = ["runtime", "std"] }
 history-semantics = { path = "../crates/history-semantics", default-features = false, features = ["runtime", "std", "cache"] }
 history-syntax = { path = "../crates/history-syntax", default-features = false, features = ["std"] }
+history-text = { path = "../crates/history-text", default-features = false, features = ["std"] }
 
 [dependencies.junco-policy]
 path = ".."

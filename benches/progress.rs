@@ -22,6 +22,9 @@ use history_syntax::{
 use junco_core::Request;
 use junco_policy::{Action, LockComponent, LockEvent};
 use std::sync::Arc;
+#[path = "text/mod.rs"]
+#[allow(dead_code)]
+mod text;
 
 const HISTORY_LENGTHS: [usize; 4] = [16, 4096, 8192, 16384];
 
@@ -71,7 +74,7 @@ fn release_head() -> Head<LockEvent<Actor, Path>> {
 }
 
 /// `All · Test(principal = actor ∧ action = Edit ∧ resource = resource) · All`.
-fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
+fn native_prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
     let matching_edit = TestExpr::and([
         principal_is(Comparison::Eq),
         action_is(Action::Edit, Comparison::Eq),
@@ -89,7 +92,7 @@ fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
 }
 
 /// `All · Edit(r) · NonEdit(r)* · Approval(r, principal ≠ actor) · NonEdit(r)*`.
-fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
+fn native_release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
     let edit = TestExpr::and([
         resource_is(Comparison::Eq),
         action_is(Action::Edit, Comparison::Eq),
@@ -114,6 +117,41 @@ fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
             RegexExpr::star(RegexExpr::test(non_edit)),
         ]),
     )
+}
+
+fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
+    text::lock_rule(include_str!("text/progress-prior.junco"), Actor, Path)
+}
+fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
+    text::lock_rule(include_str!("text/progress-approval.junco"), Actor, Path)
+}
+pub fn textual_preflight() {
+    use history_semantics::CompiledRule;
+    use history_store::History;
+    for (actual, expected) in [
+        (prior_edit_rule(), native_prior_edit_rule()),
+        (release_approval_rule(), native_release_approval_rule()),
+    ] {
+        let store = Arc::new(Store::new().unwrap());
+        let mut actual = CompiledRule::new(store.clone(), actual).unwrap();
+        let mut expected = CompiledRule::new(store.clone(), expected).unwrap();
+        let empty = History::new(store.clone()).unwrap();
+        assert_eq!(
+            actual.accepts_history(&empty, &candidate()).unwrap(),
+            expected.accepts_history(&empty, &candidate()).unwrap()
+        );
+        for (case, _) in RELEASE_CASES {
+            let history = History::from_events(
+                store.clone(),
+                (0..16).map(|index| release_event(case, index, 16)),
+            )
+            .unwrap();
+            assert_eq!(
+                actual.accepts_history(&history, &candidate()).unwrap(),
+                expected.accepts_history(&history, &candidate()).unwrap()
+            );
+        }
+    }
 }
 
 /// Alice reads throughout, with her matching edit at the midpoint.
@@ -291,6 +329,7 @@ fn configure<'criterion>(
 }
 
 fn tagged_replay(criterion: &mut Criterion) {
+    textual_preflight();
     eprintln!(
         "size_of::<LockEvent<Actor, Path>>() = {} bytes",
         size_of::<LockEvent<Actor, Path>>()

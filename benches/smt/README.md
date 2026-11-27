@@ -8,6 +8,17 @@ preserves ordinary language inclusion. Criterion IDs are
 returned counterexample are outside the timed intervals; query execution and result destruction
 are timed. No memory measurement is performed.
 
+The authoritative Junco source now comes from `textual.rs`: corpus representative
+data expands into explicit Junco Text v1 singleton predicates and regular-history
+operators, then `history-text` parses/typechecks/lowers it before timing.
+`regexlib_subset.rs` retains instance metadata and native DSL recipes only as
+untimed independent oracles. Preflight checks all 20 text recipes for mutual
+language inclusion with the originals on the same declared domains, plus concrete
+short histories. All 100 original instances and counterexample checks remain.
+The generated-source parser's iterative, bounded path accommodates the nested
+67-copy optional tails without changing their languages. No new latency
+conclusion follows from the port's `--test --noplot` smoke runs.
+
 ## Credits
 
 These instances are the `regexlib_subset` benchmarks of Caleb Stanford, Margus Veanes, and
@@ -93,6 +104,10 @@ attribution to the domain change is claimed. The named Criterion baselines were 
 
 
 ## Regenerate
+
+The legacy command below regenerates the native oracle and dataset metadata, not
+the authoritative text recipes. Keep the shared representative `CLASSES` table
+and `textual.rs` recipes consistent, then rerun the equivalence preflights.
 
 Run from the repository root with Python 3 (standard library only) and Rust 1.98.1:
 

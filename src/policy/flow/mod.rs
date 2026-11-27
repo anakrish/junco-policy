@@ -187,33 +187,44 @@ impl<P: Label, V: Label, L: Label> FlowRule<P, V, L> {
             sinks
                 .iter()
                 .map(|&sink| {
-                    TraceRule::new(
+                    Self::no_contact_with_source(
+                        tainted,
+                        sink,
                         Rule::new(
                             RuleMode::Forbid,
                             Head::new([
                                 ComponentPattern::variable(PRINCIPAL_VAR),
                                 ComponentPattern::variable(HANDLE_VAR),
-                                ComponentPattern::constant(FlowComponent::Action(FlowAction::Contact)),
+                                ComponentPattern::constant(FlowComponent::Action(
+                                    FlowAction::Contact,
+                                )),
                                 ComponentPattern::constant(FlowComponent::Label(sink)),
                             ]),
                             tail.clone(),
                         ),
-                        move |event: &FlowEvent<P, V, L>| {
-                            (
-                                format!(
-                                    "{} passed {} to a {sink} sink after receiving {tainted} data",
-                                    event.principal, event.handle
-                                ),
-                                vec![format!(
-                                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
-                                    event.principal, event.handle
-                                )],
-                            )
-                        },
                     )
+                    .0
                 })
                 .collect(),
         )
+    }
+
+    /// Attaches the native no-contact diagnostic to a caller-authored source.
+    /// The caller must preserve the tainted/sink language; policy filtering,
+    /// auditing, compilation failures and append behavior remain unchanged.
+    pub fn no_contact_with_source(tainted: L, sink: L, rule: Rule<FlowEvent<P, V, L>>) -> Self {
+        Self(TraceRule::new(rule, move |event: &FlowEvent<P, V, L>| {
+            (
+                format!(
+                    "{} passed {} to a {sink} sink after receiving {tainted} data",
+                    event.principal, event.handle
+                ),
+                vec![format!(
+                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
+                    event.principal, event.handle
+                )],
+            )
+        }))
     }
 }
 

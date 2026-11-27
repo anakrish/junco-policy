@@ -26,6 +26,10 @@ use junco_policy::{Action, LockEvent, LockPolicy};
 
 mod oracle;
 
+/// Benchmark-only textual source adapter; generation and the default oracle
+/// continue to use the original native policy.
+pub mod textual_benchmarks;
+
 pub use oracle::{Surprise, contended_events, no_surprise_violation};
 
 /// Upper bound on generated trace length.

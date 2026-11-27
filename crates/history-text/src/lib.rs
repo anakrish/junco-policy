@@ -7,7 +7,7 @@ extern crate alloc;
 mod parser;
 mod resolve;
 
-pub use parser::{ParsedPolicy, parse, parse_bytes};
+pub use parser::{ParsedPolicy, parse, parse_bytes, parse_generated};
 pub use resolve::{Entry, LowerError, RuleInfo, TypedPolicy, lower};
 
 use alloc::{string::String, vec::Vec};
@@ -147,8 +147,21 @@ impl Default for Limits {
 }
 
 impl Limits {
+    /// Opt-in ceilings for generated corpora, using iterative parsing/lowering.
+    /// Ordinary `parse` retains its original ceilings.
+    pub fn generated() -> Self {
+        Self {
+            nesting: 512,
+            rules: 1024,
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn validate(self, span: Span) -> Result<(), Diagnostic> {
-        let max = Self::default();
+        self.validate_for(span, Self::default())
+    }
+
+    pub(crate) fn validate_for(self, span: Span, max: Self) -> Result<(), Diagnostic> {
         if self.source_bytes > max.source_bytes
             || self.tokens > max.tokens
             || self.identifier_bytes > max.identifier_bytes

@@ -34,6 +34,7 @@ const HELP: &str = "cargo bench --bench agentdojo -- [options]\n\
   --out NAME                 log directory name under benches/agentdojo/runs (default: <model>+camel)\n\
   --report                   aggregate canonical logs without Python or credentials\n\
   --self-test                model-free checks (requires AgentDojo Python)\n\
+  --test                     textual policy preflight only (no Python or provider)\n\
   --help\n\
 Logs: benches/agentdojo/runs/<model>+camel/<suite>/<user>/<attack>/<injection>.json\n\
 Environment: AGENTDOJO_PYTHON; GITHUB_TOKEN or Copilot device login.";
@@ -54,6 +55,7 @@ struct Options {
     out: Option<String>,
     report: bool,
     self_test: bool,
+    test: bool,
     help: bool,
 }
 
@@ -83,6 +85,7 @@ impl Options {
             out: None,
             report: false,
             self_test: false,
+            test: false,
             help: false,
         };
         while let Some(flag) = args.next() {
@@ -118,6 +121,8 @@ impl Options {
                 "--out" => options.out = Some(value()?),
                 "--report" => options.report = true,
                 "--self-test" => options.self_test = true,
+                "--test" => options.test = true,
+                "--noplot" => {}
                 "--help" => options.help = true,
                 "--bench" => {}
                 _ => return Err(format!("unknown option: {flag}")),
@@ -732,6 +737,12 @@ async fn benchmark() -> Result<(), String> {
     let options = Arc::new(Options::parse(std::env::args().skip(1))?);
     if options.help {
         println!("{HELP}");
+        return Ok(());
+    }
+    if options.test {
+        camel::textual_preflight();
+        events::self_test()?;
+        eprintln!("AgentDojo textual policy and event preflights passed (no external execution)");
         return Ok(());
     }
     if options.events.is_some() {

@@ -1,0 +1,22 @@
+junco 1;
+schema "bench.camel/1";
+policy camel {
+ rule untrusted_sink {
+  candidate { principal: $principal, handle: $handle, action: action.contact, label: label.sink };
+  forbid all >> event {
+    principal == $principal and handle == $handle and
+    (action == action.read or action == action.receive) and label == label.untrusted
+  } >> event {
+    principal != $principal or handle != $handle or action != action.declassify or label != label.untrusted
+  }*;
+ }
+ rule private_peer {
+  candidate { principal: $principal, handle: $handle, action: action.contact, label: label.peer };
+  forbid all >> event {
+    principal == $principal and handle == $handle and
+    (action == action.read or action == action.receive) and label == label.private
+  } >> event {
+    principal != $principal or handle != $handle or action != action.declassify or label != label.private
+  }*;
+ }
+}
