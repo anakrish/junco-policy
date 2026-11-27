@@ -5,6 +5,13 @@ core is formally verified in [Verus](https://github.com/verus-lang/verus): succe
 evaluations agree with the source policy's trace language, under the native-type
 obligations described below.
 
+The optional [`history-facts`](crates/history-facts/README.md) frontend provides
+Rego-inspired (not Rego-compatible) typed static facts, event/history definitions,
+and explicitly ordered require/forbid obligations. It emits the existing typed
+history DSL; its parser, host vocabulary and lowering are **not Verus-proved**.
+See its grammar, trust boundary and runnable prior-edit, ownership/freshness and
+information-flow/reset examples before using textual policies.
+
 Check a proposed action against what has already happened. A rule can require a prior
 edit, forbid a stale write, or bind a decision to the principal and resource in the
 request. Retained policies compile once and reuse their progress as histories grow.

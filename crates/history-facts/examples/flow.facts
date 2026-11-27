@@ -1,0 +1,28 @@
+language junco.facts.v1;
+package examples.flow;
+schema flow;
+
+fact source: label := label.untrusted;
+fact sink: label := label.external;
+
+predicate acquires_taint(e: event, p: principal, v: handle) if {
+    e.principal == p;
+    e.handle == v;
+    e.label == source;
+    e.action == action.read or e.action == action.receive;
+}
+predicate clears_taint(e: event, p: principal, v: handle) if {
+    e.principal == p;
+    e.handle == v;
+    e.label == source;
+    e.action == action.declassify;
+}
+history tainted_copy(p: principal, v: handle) if {
+    since e in history { acquires_taint(e, p, v); } unless { clears_taint(e, p, v); };
+}
+policy outbound ordered {
+    forbid contact_tainted
+        on {principal: p, handle: v, action: action.contact, label: sink}
+        if { tainted_copy(p, v); }
+        report flow.taint;
+}

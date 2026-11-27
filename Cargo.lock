@@ -755,6 +755,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "history-facts"
+version = "0.1.0"
+dependencies = [
+ "history-semantics",
+ "history-store",
+ "history-syntax",
+ "junco-core",
+ "junco-policy",
+]
+
+[[package]]
 name = "history-semantics"
 version = "0.1.0"
 dependencies = [

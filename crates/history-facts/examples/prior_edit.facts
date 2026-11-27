@@ -1,0 +1,21 @@
+language junco.facts.v1;
+package examples.prior_edit;
+schema lock;
+
+predicate own_edit(e: event, p: principal, r: resource) if {
+    e.principal == p;
+    e.resource == r;
+    e.action == action.edit;
+}
+
+history edited_before(p: principal, r: resource) if {
+    exists e in history { own_edit(e, p, r); };
+}
+
+# Illustrative requirement, not the built-in lock policy.
+policy release_requirement ordered {
+    require prior_edit
+        on {principal: p, action: action.release, resource: r}
+        if { edited_before(p, r); }
+        report prior.edit_required;
+}
