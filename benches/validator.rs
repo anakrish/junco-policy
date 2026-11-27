@@ -16,6 +16,9 @@ use junco_core::Request;
 use junco_policy::{Action, LockComponent, LockEvent};
 use std::sync::Arc;
 
+#[path = "support/pipelines.rs"]
+mod pipelines;
+
 /// Benchmark principal identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Actor(u32);
@@ -43,93 +46,100 @@ fn request(actor: Actor, action: Action, path: Path) -> Request<LockEvent<Actor,
     Request::new(LockEvent::new(actor, action, path), ())
 }
 
-fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
-    let actor = format!("actor-{suffix}");
-    let target = format!("target-{suffix}");
-    let principal = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(Component(0), ComponentPattern::variable(actor.clone())),
-    );
-    let action = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(Action::Edit)),
-        ),
-    );
-    let resource = TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(Component(2), ComponentPattern::variable(target.clone())),
-    );
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable(actor),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable(target),
-        ]),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(TestExpr::and([principal, action, resource])),
-        ]),
-    )
-}
-
-fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
-    let matching_remove = RegexExpr::test(TestExpr::and([
-        TestExpr::atom(
+mod native_oracle {
+    use super::*;
+    pub(super) fn prior_edit_rule(suffix: usize) -> Rule<LockEvent<Actor, Path>> {
+        let actor = format!("actor-{suffix}");
+        let target = format!("target-{suffix}");
+        let principal = TestExpr::atom(
+            Comparison::Eq,
+            AtomPattern::new(Component(0), ComponentPattern::variable(actor.clone())),
+        );
+        let action = TestExpr::atom(
             Comparison::Eq,
             AtomPattern::new(
                 Component(1),
-                ComponentPattern::constant(LockComponent::Action(Action::Remove)),
+                ComponentPattern::constant(LockComponent::Action(Action::Edit)),
             ),
-        ),
-        TestExpr::atom(
+        );
+        let resource = TestExpr::atom(
             Comparison::Eq,
-            AtomPattern::new(Component(2), ComponentPattern::variable("target")),
-        ),
-    ]));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Remove)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat([RegexExpr::all(), matching_remove, RegexExpr::all()]),
-    )
-}
-
-fn every_resource_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
-    RegexExpr::star(RegexExpr::test(TestExpr::atom(
-        Comparison::Neq,
-        AtomPattern::new(
-            Component(2),
-            ComponentPattern::constant(LockComponent::Resource(Path(ABSENT_IDS + index as u32))),
-        ),
-    )))
-}
-
-fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
-    assert!(depth > 0, "regex depth must be positive");
-    let mut leaves = (0..depth).map(every_resource_leaf);
-    let mut tail = leaves.next().expect("positive depth has one leaf");
-    for (index, leaf) in leaves.enumerate() {
-        tail = if index % 2 == 0 {
-            RegexExpr::union([tail, leaf])
-        } else {
-            RegexExpr::intersect([tail, leaf])
-        };
+            AtomPattern::new(Component(2), ComponentPattern::variable(target.clone())),
+        );
+        Rule::new(
+            RuleMode::Require,
+            Head::new([
+                ComponentPattern::variable(actor),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable(target),
+            ]),
+            RegexExpr::concat([
+                RegexExpr::all(),
+                RegexExpr::test(TestExpr::and([principal, action, resource])),
+            ]),
+        )
     }
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        tail,
-    )
+
+    pub(super) fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
+        let matching_remove = RegexExpr::test(TestExpr::and([
+            TestExpr::atom(
+                Comparison::Eq,
+                AtomPattern::new(
+                    Component(1),
+                    ComponentPattern::constant(LockComponent::Action(Action::Remove)),
+                ),
+            ),
+            TestExpr::atom(
+                Comparison::Eq,
+                AtomPattern::new(Component(2), ComponentPattern::variable("target")),
+            ),
+        ]));
+        Rule::new(
+            RuleMode::Forbid,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Remove)),
+                ComponentPattern::variable("target"),
+            ]),
+            RegexExpr::concat([RegexExpr::all(), matching_remove, RegexExpr::all()]),
+        )
+    }
+
+    fn every_resource_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
+        RegexExpr::star(RegexExpr::test(TestExpr::atom(
+            Comparison::Neq,
+            AtomPattern::new(
+                Component(2),
+                ComponentPattern::constant(LockComponent::Resource(Path(
+                    ABSENT_IDS + index as u32,
+                ))),
+            ),
+        )))
+    }
+
+    pub(super) fn deeply_nested_resource_allow_all_rule(
+        depth: usize,
+    ) -> Rule<LockEvent<Actor, Path>> {
+        assert!(depth > 0, "regex depth must be positive");
+        let mut leaves = (0..depth).map(every_resource_leaf);
+        let mut tail = leaves.next().expect("positive depth has one leaf");
+        for (index, leaf) in leaves.enumerate() {
+            tail = if index % 2 == 0 {
+                RegexExpr::union([tail, leaf])
+            } else {
+                RegexExpr::intersect([tail, leaf])
+            };
+        }
+        Rule::new(
+            RuleMode::Require,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable("target"),
+            ]),
+            tail,
+        )
+    }
 }
 
 fn unique_read(index: usize) -> Request<LockEvent<Actor, Path>, ()> {
@@ -137,115 +147,204 @@ fn unique_read(index: usize) -> Request<LockEvent<Actor, Path>, ()> {
     request(Actor(id), Action::Read, Path(id))
 }
 
-// Each distinct star accepts every benchmark event and is stable under differentiation.
-fn every_event_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
-    RegexExpr::star(RegexExpr::test(TestExpr::atom(
-        Comparison::Neq,
-        AtomPattern::new(
-            Component(0),
-            ComponentPattern::constant(LockComponent::Principal(Actor(ABSENT_IDS + index as u32))),
-        ),
-    )))
-}
-
-fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
-    assert!(depth > 0, "regex depth must be positive");
-    let mut leaves = (0..depth).map(every_event_leaf);
-    let mut tail = leaves.next().expect("positive depth has one leaf");
-    // Alternating operators retain binary nesting because canonicalization only flattens like kinds.
-    for (index, leaf) in leaves.enumerate() {
-        tail = if index % 2 == 0 {
-            RegexExpr::union([tail, leaf])
-        } else {
-            RegexExpr::intersect([tail, leaf])
-        };
+mod native_stress_oracle {
+    use super::*;
+    // Each distinct star accepts every benchmark event and is stable under differentiation.
+    fn every_event_leaf(index: usize) -> RegexExpr<LockEvent<Actor, Path>> {
+        RegexExpr::star(RegexExpr::test(TestExpr::atom(
+            Comparison::Neq,
+            AtomPattern::new(
+                Component(0),
+                ComponentPattern::constant(LockComponent::Principal(Actor(
+                    ABSENT_IDS + index as u32,
+                ))),
+            ),
+        )))
     }
 
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        tail,
-    )
+    pub(super) fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+        assert!(depth > 0, "regex depth must be positive");
+        let mut leaves = (0..depth).map(every_event_leaf);
+        let mut tail = leaves.next().expect("positive depth has one leaf");
+        // Alternating operators retain binary nesting because canonicalization only flattens like kinds.
+        for (index, leaf) in leaves.enumerate() {
+            tail = if index % 2 == 0 {
+                RegexExpr::union([tail, leaf])
+            } else {
+                RegexExpr::intersect([tail, leaf])
+            };
+        }
+
+        Rule::new(
+            RuleMode::Require,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable("target"),
+            ]),
+            tail,
+        )
+    }
+
+    pub(super) fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
+        let factors = (0..steps).map(|index| {
+            RegexExpr::union([
+                RegexExpr::epsilon(),
+                RegexExpr::test(TestExpr::atom(
+                    Comparison::Neq,
+                    AtomPattern::new(
+                        Component(2),
+                        ComponentPattern::constant(LockComponent::Resource(Path(
+                            ABSENT_IDS + index as u32,
+                        ))),
+                    ),
+                )),
+            ])
+        });
+        Rule::new(
+            RuleMode::Require,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable("target"),
+            ]),
+            RegexExpr::concat(factors),
+        )
+    }
+
+    /// Language whose residual DAG gains one suffix alternative after each matching event.
+    ///
+    /// `Σ* · Read · Σ^(window + 1)` recognizes histories whose `(window + 2)`th event from the end is a
+    /// read. A shorter all-read history keeps adding candidate suffixes without reaching a terminal
+    /// residual. The full DFA has exponentially many states even though this measured path grows
+    /// linearly.
+    pub(super) fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
+        assert!(window > 0, "residual-growth window must be positive");
+        let any_event = RegexExpr::test(TestExpr::true_test());
+        let read = RegexExpr::test(TestExpr::atom(
+            Comparison::Eq,
+            AtomPattern::new(
+                Component(1),
+                ComponentPattern::constant(LockComponent::Action(Action::Read)),
+            ),
+        ));
+        let factors = std::iter::once(RegexExpr::all())
+            .chain(std::iter::once(read))
+            .chain(std::iter::repeat_n(any_event, window + 1));
+        Rule::new(
+            RuleMode::Forbid,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable("target"),
+            ]),
+            RegexExpr::concat(factors),
+        )
+    }
+
+    /// One unique absent-witness rule that forces a complete nonterminal history scan.
+    pub(super) fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
+        let absent = RegexExpr::test(TestExpr::atom(
+            Comparison::Eq,
+            AtomPattern::new(
+                Component(0),
+                ComponentPattern::constant(LockComponent::Principal(Actor(
+                    ABSENT_IDS + index as u32,
+                ))),
+            ),
+        ));
+        Rule::new(
+            RuleMode::Forbid,
+            Head::new([
+                ComponentPattern::variable("actor"),
+                ComponentPattern::constant(LockComponent::Action(Action::Release)),
+                ComponentPattern::variable("target"),
+            ]),
+            RegexExpr::concat([RegexExpr::all(), absent, RegexExpr::all()]),
+        )
+    }
 }
 
+fn prior_edit_rule(_suffix: usize) -> Rule<LockEvent<Actor, Path>> {
+    pipelines::one(pipelines::TERMINAL_EDIT, Actor, Path)
+}
+fn duplicate_remove_rule() -> Rule<LockEvent<Actor, Path>> {
+    pipelines::one(pipelines::DUPLICATE_REMOVE, Actor, Path)
+}
+fn deeply_nested_resource_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+    pipelines::nested(depth, "resource", ABSENT_IDS, Actor, Path)
+}
+fn deeply_nested_allow_all_rule(depth: usize) -> Rule<LockEvent<Actor, Path>> {
+    pipelines::nested(depth, "principal", ABSENT_IDS, Actor, Path)
+}
 fn advancing_optional_rule(steps: usize) -> Rule<LockEvent<Actor, Path>> {
-    let factors = (0..steps).map(|index| {
-        RegexExpr::union([
-            RegexExpr::epsilon(),
-            RegexExpr::test(TestExpr::atom(
-                Comparison::Neq,
-                AtomPattern::new(
-                    Component(2),
-                    ComponentPattern::constant(LockComponent::Resource(Path(
-                        ABSENT_IDS + index as u32,
-                    ))),
-                ),
-            )),
-        ])
-    });
-    Rule::new(
-        RuleMode::Require,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat(factors),
-    )
+    pipelines::optional(steps, ABSENT_IDS, Actor, Path)
 }
-
-/// Language whose residual DAG gains one suffix alternative after each matching event.
-///
-/// `Σ* · Read · Σ^(window + 1)` recognizes histories whose `(window + 2)`th event from the end is a
-/// read. A shorter all-read history keeps adding candidate suffixes without reaching a terminal
-/// residual. The full DFA has exponentially many states even though this measured path grows
-/// linearly.
 fn growing_residual_rule(window: usize) -> Rule<LockEvent<Actor, Path>> {
-    assert!(window > 0, "residual-growth window must be positive");
-    let any_event = RegexExpr::test(TestExpr::true_test());
-    let read = RegexExpr::test(TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(Action::Read)),
-        ),
-    ));
-    let factors = std::iter::once(RegexExpr::all())
-        .chain(std::iter::once(read))
-        .chain(std::iter::repeat_n(any_event, window + 1));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat(factors),
-    )
+    pipelines::growing(window, Actor, Path)
+}
+fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
+    pipelines::absent(ABSENT_IDS + index as u32, Actor, Path)
 }
 
-/// One unique absent-witness rule that forces a complete nonterminal history scan.
-fn absent_witness_rule(index: usize) -> Rule<LockEvent<Actor, Path>> {
-    let absent = RegexExpr::test(TestExpr::atom(
-        Comparison::Eq,
-        AtomPattern::new(
-            Component(0),
-            ComponentPattern::constant(LockComponent::Principal(Actor(ABSENT_IDS + index as u32))),
+fn textual_preflight() {
+    use history_semantics::CompiledRule;
+    use history_store::History;
+    let store = Arc::new(Store::new().unwrap());
+    let pairs = [
+        (prior_edit_rule(0), native_oracle::prior_edit_rule(0)),
+        (
+            duplicate_remove_rule(),
+            native_oracle::duplicate_remove_rule(),
         ),
-    ));
-    Rule::new(
-        RuleMode::Forbid,
-        Head::new([
-            ComponentPattern::variable("actor"),
-            ComponentPattern::constant(LockComponent::Action(Action::Release)),
-            ComponentPattern::variable("target"),
-        ]),
-        RegexExpr::concat([RegexExpr::all(), absent, RegexExpr::all()]),
-    )
+        (
+            deeply_nested_resource_allow_all_rule(32),
+            native_oracle::deeply_nested_resource_allow_all_rule(32),
+        ),
+        (
+            deeply_nested_allow_all_rule(32),
+            native_stress_oracle::deeply_nested_allow_all_rule(32),
+        ),
+        (
+            advancing_optional_rule(16),
+            native_stress_oracle::advancing_optional_rule(16),
+        ),
+        (
+            growing_residual_rule(4),
+            native_stress_oracle::growing_residual_rule(4),
+        ),
+        (
+            absent_witness_rule(0),
+            native_stress_oracle::absent_witness_rule(0),
+        ),
+    ];
+    for (text, native) in pairs {
+        let mut left = CompiledRule::new(store.clone(), text).unwrap();
+        let mut right = CompiledRule::new(store.clone(), native).unwrap();
+        for events in [
+            vec![],
+            vec![LockEvent::new(ALICE, Action::Edit, SRC_A)],
+            vec![
+                LockEvent::new(ALICE, Action::Edit, SRC_A),
+                LockEvent::new(ALICE, Action::Read, SRC_A),
+            ],
+            vec![LockEvent::new(ALICE, Action::Remove, SRC_A)],
+            vec![LockEvent::new(
+                Actor(ABSENT_IDS),
+                Action::Read,
+                Path(ABSENT_IDS),
+            )],
+        ] {
+            let history = History::from_events(store.clone(), events).unwrap();
+            for action in [Action::Read, Action::Edit, Action::Release, Action::Remove] {
+                let candidate = LockEvent::new(ALICE, action, SRC_A);
+                assert_eq!(
+                    left.accepts_history(&history, &candidate).unwrap(),
+                    right.accepts_history(&history, &candidate).unwrap()
+                );
+            }
+        }
+    }
 }
 
 // The matching Require rule forces all one million committed events through the depth-32 tail.
@@ -521,6 +620,7 @@ fn benchmark_many_rules_stress(criterion: &mut Criterion) {
 }
 
 fn benchmark_compilation(criterion: &mut Criterion) {
+    textual_preflight();
     let mut group = criterion.benchmark_group("compile_rules");
     for count in [1_usize, 16, 64] {
         group.bench_with_input(

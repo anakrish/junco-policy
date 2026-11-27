@@ -1,0 +1,10 @@
+schema Lock(principal, action, resource);
+rule Approval = Candidate | bind principal=p, resource=r | where action == "release"
+    | require History | algebra {
+        any;
+        single (Event | where all_of(resource == r, action == "edit"));
+        single (Event | where any_of(resource != r, action != "edit")); star;
+        single (Event | where all_of(resource == r, action == "remove", principal != p));
+        single (Event | where any_of(resource != r, action != "edit")); star;
+        concat 5;
+    } | deny "benchmark";

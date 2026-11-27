@@ -79,13 +79,18 @@ event      = "Event" { "|" "where" predicate } ;
 predicate  = conjunction { "or" conjunction } ;
 conjunction = unary { "and" unary } ;
 unary      = "true" | "false" | Field ("==" | "!=") value
-           | reference | "not" "(" predicate ")" | "(" predicate ")" ;
+           | reference | "not" "(" predicate ")" | "(" predicate ")"
+           | ("all_of" | "any_of") "(" [predicate { "," predicate }] ")" ;
 history    = primary { "|" ("also" operand | "either" operand | "complement") } ;
 primary    = "History" "|" constructor | reference | "(" history ")" ;
 operand    = reference | "(" history ")" ;
 constructor = "any" | "empty" | "never"
             | "exists" "(" predicate_arg ")"
-            | "active" "(" predicate_arg "," "reset" "=" predicate_arg ")" ;
+            | "active" "(" predicate_arg "," "reset" "=" predicate_arg ")"
+            | "algebra" "{" instruction* "}" ;
+instruction = ("any" | "empty" | "never" | "star" | "negate") ";"
+            | "single" predicate_arg ";"
+            | ("concat" | "choice" | "intersection") Integer ";" ;
 predicate_arg = reference | "(" event ")" ;
 reference  = Ident [ "(" [value { "," value }] ")" ] ;
 value      = Literal | Ident ;
@@ -128,6 +133,51 @@ An event predicate remains a one-event `Test`, even `true` or `false`.
 `also`/`either` are whole-language intersection/union, left-associative;
 witnesses need not correlate. `complement` is whole-language `RegexExpr::Not`.
 Predicate `not` applies De Morgan and flips Eq/Neq, without changing consumption.
+`all_of` and `any_of` construct n-ary predicate conjunction/disjunction directly,
+including the native empty-list identities. They avoid a deep binary chain for
+byte-class predicates without changing their open-domain equality semantics.
+
+### Explicit whole-history algebra
+
+For generated workloads and policies outside occurrence/reset sugar, an inline
+rule can use a bounded postfix **source expression**, not a scan/evaluator:
+
+```text
+schema Lock(principal, action, resource);
+rule TerminalEdit = Candidate | bind principal=p, resource=r | where action == "release"
+    | require History | algebra {
+        any;
+        single (Event | where all_of(principal == p, action == "edit", resource == r));
+        concat 2;
+    } | deny "The final committed event must be a matching edit.";
+```
+
+This is exactly `All · Test(P)`, **not** `exists(P)`'s `All · Test(P) · All`.
+Instructions construct typed syntax on a parser-owned stack:
+
+| Instruction | DSL construction |
+| --- | --- |
+| `any;` / `empty;` / `never;` | push All / Epsilon / Empty |
+| `single (Event ...);` or `single Predicate(args);` | push Test(predicate) |
+| `star;` / `negate;` | wrap the top language in Star / Not |
+| `concat n;` / `choice n;` / `intersection n;` | pop the last n languages in source order; push Concat / Union / Intersect |
+
+Zero-operand combinators preserve native identities: concat is epsilon, choice
+is empty, intersection is universal. Exactly one language must remain. Operand
+underflow, overflow, unknown instructions and trailing garbage are errors.
+`single` consumes one original event. `negate` is whole-language complement,
+distinct from predicate `not`. No instruction can filter history or access a
+runtime table, stack state or historical binding.
+
+The explicit form is available **only inline in rule languages**, not in `let`
+definitions; ordinary typed helpers can supply its predicate arguments. This
+avoids recursively cloning/substituting deep helper trees. Construction is
+iterative with a separate fixed generated-tree depth cap of **512** (counting
+predicate depth), while recursive grammar/predicate parsing still respects
+`Limits::nesting` and its unchanged hard cap of 64. All ordinary token, byte and
+cumulative node budgets still apply. The algebra's pending stack and unused
+document rules use existing iterative `Rule::dispose`; transferred DSL trees
+retain their native ownership APIs. There is no new evaluator or frontend cache.
 
 A head mismatch skips a rule. Require violates on nonmembership; Forbid violates
 on membership. Rules retain textual order and the first violation's diagnostic.
@@ -148,8 +198,9 @@ Source bytes are checked **before lexing/allocation**. Lexing borrows token text
 token/literal bounds precede decoded strings or token insertion. Construction
 charges a cumulative node budget before cloning named trees, and checks generated
 depth before wrapping expressions. Recursive parsing, substitution, negation,
-cloning and destruction are bounded by hard nesting limits. Flat Boolean and
-history chains cannot create arbitrarily deep trees. Host diagnostics are also
+cloning and destruction are bounded by hard nesting limits for ordinary pipelines.
+Explicit algebra has the separately documented iterative construction/depth cap.
+Flat Boolean and history chains cannot create arbitrarily deep trees. Host diagnostics are also
 checked for size after the trusted host returns them. Frontend limits do not
 replace the existing compiler/evaluator's resource controls or memory allocator.
 All failures return an `ErrorKind`, half-open source byte `Span`, and explanation.
@@ -189,3 +240,34 @@ existing DSL rules over bounded histories for prior-edit, the seven-rule lock
 policy and information flow. They cover empty histories, original reset events,
 candidate exclusion, first denial, typed hygiene, invalid inputs, wrong host tags,
 operational errors, and resource/expansion boundaries.
+
+## Committed benchmark ports
+
+The root validator/progress/SMT/RE# benchmarks and AgentDojo policy use authoritative
+pipeline source files or generated instruction templates in `benches/`.
+`benches/support/pipelines.rs` generates text directly, never serializes an
+existing native policy factory. Generated SMT/RE# templates construct text, not
+`history_syntax::RegexExpr`, despite retaining a local `RegexExpr` name for the
+template helper. Existing Rust DSL constructions remain only as untimed oracles
+and concrete inclusion-counterexample checks.
+
+Fuzz's lock_policy, lock and other comparison targets use its benchmark-only
+text adapter; the original generator, default fuzzer and native oracle remain
+unchanged. All seven lock rules are injected into `LockPolicy::from_rules` to
+retain native diagnostics and incremental claim folds. AgentDojo injects its
+two taint rules with `FlowRule::no_contact_after_read_source`, retaining native
+diagnostics, audit mode and batch error behavior. Standard regex translation
+retains byte mode, boundary lowering and open-domain class semantics (large
+disequality classes and full-byte True still accept non-byte Symbol values).
+
+Parsing/typechecking/lowering happens before the existing evaluation timers.
+Validator engine compilation still starts after constructing/preparing the typed
+source, exactly as before; parsing is excluded from `Instant` intervals, and
+cloning/ingestion/rollback stay at their previous boundaries. No benchmark names,
+corpus, histories, sample counts, cache features or backend formulas are changed.
+AgentDojo is an offline/event/live driver rather than Criterion: `--test` now
+runs its existing offline event preflight, without Python, a provider or output
+files. Existing live/self-test modes are unchanged.
+
+Criterion `--test --noplot` and compile preflights are correctness checks, not
+new performance measurements; they support **no latency conclusions**.

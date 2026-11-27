@@ -18,6 +18,7 @@ name = "lock_policy_harness"
 path = "src/lib.rs"
 
 [dependencies]
+history-pipeline = { path = "../crates/history-pipeline" }
 libfuzzer-sys = "0.4"
 arbitrary = "1.4"
 junco-core = { path = "../crates/junco-core", default-features = false, features = ["std"] }

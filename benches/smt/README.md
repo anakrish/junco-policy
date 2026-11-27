@@ -32,6 +32,16 @@ the SMT query asks for a string in the left language but not the right language.
 
 ## Translation
 
+The committed templates generate `history-pipeline` text directly. Their local
+`RegexExpr` alias is a textual instruction builder, not the native DSL.
+`History | algebra` preserves all original concat/union/star/nested-optional
+shapes, including loop bounds of 67, and `single` with `any_of` preserves the
+n-ary class tests. Text is parsed, typechecked and lowered before analyzer setup;
+only the existing inclusion query/result destruction remains timed. The constant
+head is also sourced from text. Native constructors remain solely for untimed
+concrete-counterexample validation. Smoke preflights imply no new latency result;
+the historical measurements below predate this frontend port.
+
 - A character is the action of `Char(u8)`; its principal and resource are both `()`.
 - A range or union of ranges becomes one `Test(Or[Eq atoms])` over the representatives inside it.
 - Nested `re.union` and `re.++` chains are flattened. Empty-string terms drop out of concatenations.

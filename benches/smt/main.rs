@@ -11,8 +11,10 @@ use criterion::{BenchmarkId, Criterion, SamplingMode, criterion_group, criterion
 use history_analysis::{Components, Domains, Inclusion, PolicyAnalyzer, Value};
 use history_semantics::CompiledRule;
 use history_store::{History, Store};
-use history_syntax::{Component, Component3, ComponentPattern, Head, Rule, RuleMode};
+use history_syntax::{Component, Component3, Rule, RuleMode};
 
+#[path = "../support/pipelines.rs"]
+mod pipelines;
 mod regexlib_subset;
 
 use regexlib_subset::{ALPHABET, Char, INSTANCES};
@@ -36,11 +38,6 @@ fn concrete(components: &Components<Char>) -> Char {
 /// Times `tail_included`; the head, analyzer and regexes are built outside the timed call.
 fn benchmark_regexlib_subset(criterion: &mut Criterion) {
     // These tails have no variables, so any inhabited candidate head gives the same inclusion.
-    let head = Head::<Char>::new([
-        ComponentPattern::constant(Component3::C0(())),
-        ComponentPattern::constant(Component3::C1(ALPHABET[0])),
-        ComponentPattern::constant(Component3::C2(())),
-    ]);
     let mut group = criterion.benchmark_group("regexlib_subset");
     group
         .sampling_mode(SamplingMode::Flat)
@@ -49,7 +46,24 @@ fn benchmark_regexlib_subset(criterion: &mut Criterion) {
         .measurement_time(Duration::from_secs(2));
     let mut checked_counterexamples = 0usize;
     for instance in &INSTANCES {
-        let (left, right) = ((instance.left)(), (instance.right)());
+        let selector = format!(
+            "Candidate | where principal == 0 and action == {} and resource == 0",
+            ALPHABET[0]
+        );
+        let left_rule = pipelines::language_rule(
+            (instance.left)(),
+            &regexlib_subset::Vocab,
+            &selector,
+            "forbid",
+        );
+        let right_rule = pipelines::language_rule(
+            (instance.right)(),
+            &regexlib_subset::Vocab,
+            &selector,
+            "forbid",
+        );
+        let head = left_rule.head;
+        let (left, right) = (left_rule.tail, right_rule.tail);
         let mut analyzer = PolicyAnalyzer::new(
             Domains::<Char>::infinite()
                 .with_domain(Component(0), &[Component3::C0(())])

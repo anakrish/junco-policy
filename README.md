@@ -14,6 +14,9 @@ provides KQL-inspired candidate/event pipelines and whole-history evidence queri
 It lowers to the existing typed DSL, not a table evaluator, and is not Kusto/KQL
 compatible. Its parser and host vocabulary are outside the Verus proof boundary.
 Runnable prior-edit, seven-rule lock and declassification examples are included.
+Committed Junco benchmark policies also use this frontend, including explicit
+whole-history algebra for generated regex/depth workloads. Parser setup stays
+outside existing kernel timers; smoke checks are not performance measurements.
 
 ## Check a proposed action
 

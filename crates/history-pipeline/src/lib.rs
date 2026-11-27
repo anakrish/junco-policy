@@ -104,7 +104,9 @@ pub trait Vocabulary<E: Event> {
 ///
 /// These may be reduced, but not raised above the hard caps (see README).
 /// `nodes` is a conservative cumulative construction/expansion budget, not
-/// merely the final tree size. `nesting` bounds both parser and generated trees.
+/// merely the final tree size. `nesting` bounds recursive grammar and ordinary
+/// generated trees. Inline algebra is built iteratively with a fixed depth cap
+/// of 512, still subject to these source/token/node budgets.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
     pub source_bytes: usize,
@@ -164,7 +166,16 @@ pub fn parse<E: Event>(
 
 /// Release the ordered typed rules without copying or numeric lowering.
 pub fn lower<E: Event>(document: Document<E>) -> Vec<NamedRule<E>> {
-    document.rules
+    let mut document = document;
+    core::mem::take(&mut document.rules)
+}
+
+impl<E: Event> Drop for Document<E> {
+    fn drop(&mut self) {
+        for item in self.rules.drain(..) {
+            item.rule.dispose();
+        }
+    }
 }
 
 /// Compile the document with the existing retained policy implementation.

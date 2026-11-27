@@ -23,7 +23,7 @@ use history_semantics::policy::{
     CompiledPolicy, PolicyRule, action_is, forbid, last_state_change, principal_is, resource_is,
 };
 use history_store::{History, Store};
-use history_syntax::{Comparison, RegexExpr, TestExpr};
+use history_syntax::{Comparison, RegexExpr, Rule, TestExpr};
 use junco_core::{CompileError, HistoryError};
 
 use crate::{Action, LockComponent, LockEvent};
@@ -296,6 +296,39 @@ where
     pub fn new(store: Arc<Store<LockEvent<P, R>>>) -> Result<Self, CompileError> {
         Ok(Self {
             compiled: CompiledPolicy::new(store, lock_rules())?,
+            claims: ClaimTable::new(),
+        })
+    }
+
+    /// Compiles caller-authored versions of the seven ordered lock rules while
+    /// retaining the native owner/stale/reader diagnostics and incremental claim fold.
+    ///
+    /// The caller is responsible for the lock-language semantics and order:
+    /// owner Edit/Release/Remove, stale Edit/Remove, reader Edit/Remove.
+    /// Default construction is unchanged; no native rule factory is called here.
+    pub fn from_rules(
+        store: Arc<Store<LockEvent<P, R>>>,
+        rules: [Rule<LockEvent<P, R>>; 7],
+    ) -> Result<Self, CompileError> {
+        let diagnostics: [fn(&LockContext) -> (String, Vec<String>); 7] = [
+            owner_denial,
+            owner_denial,
+            owner_denial,
+            stale_denial,
+            stale_denial,
+            reader_denial,
+            reader_denial,
+        ];
+        let rules = rules
+            .into_iter()
+            .zip(diagnostics)
+            .map(|(rule, diagnostic)| PolicyRule {
+                rule,
+                diagnostic: Box::new(diagnostic),
+            })
+            .collect();
+        Ok(Self {
+            compiled: CompiledPolicy::new(store, rules)?,
             claims: ClaimTable::new(),
         })
     }

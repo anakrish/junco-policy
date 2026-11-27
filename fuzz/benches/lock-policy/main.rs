@@ -16,8 +16,8 @@ use criterion::{
     BatchSize, BenchmarkId, Criterion, PlottingBackend, criterion_group, criterion_main,
 };
 use history_store::History;
-use junco_policy::LockPolicy;
-use lock_policy_harness::{BYTES_PER_EVENT, check, entropy, granted_history, probe_candidates};
+use lock_policy_harness::textual_benchmarks::{granted_history, policy};
+use lock_policy_harness::{BYTES_PER_EVENT, check, entropy, probe_candidates};
 
 /// Committed history lengths 2^4 ..= 2^16.
 const LENGTHS: [usize; 13] = [
@@ -40,7 +40,7 @@ fn lock_scaling(criterion: &mut Criterion) {
     });
     let probes = probe_candidates();
     let mut verdict_policy =
-        LockPolicy::new(Arc::clone(store)).expect("benchmark policy compilation failed");
+        policy(Arc::clone(store)).expect("benchmark policy compilation failed");
 
     // A denial returns from the compiled policy early, so print each verdict once per point.
     for (name, candidate) in &probes {
@@ -63,7 +63,7 @@ fn lock_scaling(criterion: &mut Criterion) {
     for (name, candidate) in &probes {
         for (length, prefix) in LENGTHS.iter().zip(&prefixes) {
             let mut policy =
-                LockPolicy::new(Arc::clone(store)).expect("benchmark policy compilation failed");
+                policy(Arc::clone(store)).expect("benchmark policy compilation failed");
             group.bench_with_input(BenchmarkId::new(*name, length), prefix, |bencher, trace| {
                 bencher.iter(|| {
                     check(&mut policy, black_box(trace), black_box(candidate))
@@ -81,7 +81,7 @@ fn lock_scaling(criterion: &mut Criterion) {
     for (name, candidate) in &probes {
         for (length, prefix) in LENGTHS.iter().zip(&prefixes) {
             let mut policy =
-                LockPolicy::new(Arc::clone(store)).expect("benchmark policy compilation failed");
+                policy(Arc::clone(store)).expect("benchmark policy compilation failed");
             group.bench_with_input(BenchmarkId::new(*name, length), prefix, |bencher, trace| {
                 bencher.iter_batched(
                     || trace.try_clone().expect("benchmark history clone failed"),

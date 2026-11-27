@@ -373,3 +373,63 @@ fn host_tagging_is_checked_and_strings_are_utf8_with_small_escape_set() {
     assert_eq!(document.rules()[0].diagnostic.message, "café\n\"ok\"\\");
     assert_eq!(document.rules()[0].diagnostic.fixes, ["a\tb\r"]);
 }
+
+#[test]
+fn explicit_algebra_is_bounded_typed_source_not_a_runtime_stack() {
+    let source = |instructions: &str| {
+        format!(
+            "{SCHEMA} rule R = Candidate | require History | algebra {{ {instructions} }} | deny \"x\";"
+        )
+    };
+    for (instructions, kind) in [
+        ("star;", ErrorKind::Syntax),
+        ("any; concat 2;", ErrorKind::Syntax),
+        ("any; any;", ErrorKind::Syntax),
+        ("", ErrorKind::Syntax),
+        ("any; concat 184467440737095516160;", ErrorKind::Limit),
+        ("any; concat -1;", ErrorKind::Unsupported),
+        ("any; concat missing;", ErrorKind::Syntax),
+        ("any; join;", ErrorKind::Unsupported),
+        (
+            "single (Event | where principal == p);",
+            ErrorKind::Variable,
+        ),
+        (
+            "single (Event | where any_of(resource == p));",
+            ErrorKind::Variable,
+        ),
+    ] {
+        assert_eq!(
+            parse::<LockEvent>(&source(instructions), &Lock, Limits::default())
+                .unwrap_err()
+                .kind,
+            kind
+        );
+    }
+    fails("let A = History | algebra { any; };", ErrorKind::Kind);
+    let exact = source(&format!("empty;{}", "star;".repeat(511)));
+    let document = parse::<LockEvent>(&exact, &Lock, Limits::default()).unwrap();
+    drop(document);
+    let over = source(&format!("empty;{}", "star;".repeat(512)));
+    assert_eq!(
+        parse::<LockEvent>(&over, &Lock, Limits::default())
+            .unwrap_err()
+            .kind,
+        ErrorKind::Limit
+    );
+    for instruction in ["concat 0;", "choice 0;", "intersection 0;"] {
+        assert!(parse::<LockEvent>(&source(instruction), &Lock, Limits::default()).is_ok());
+    }
+    let predicate = (0..128)
+        .map(|i| format!("principal != {i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert!(
+        parse::<LockEvent>(
+            &source(&format!("single (Event | where all_of({predicate}));")),
+            &Lock,
+            Limits::default()
+        )
+        .is_ok()
+    );
+}

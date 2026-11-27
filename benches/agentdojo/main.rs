@@ -842,7 +842,12 @@ async fn benchmark() -> Result<(), String> {
 
 #[tokio::main]
 async fn main() {
-    if let Err(error) = benchmark().await {
+    let result = if std::env::args().any(|arg| arg == "--test") {
+        events::self_test()
+    } else {
+        benchmark().await
+    };
+    if let Err(error) = result {
         eprintln!("agentdojo: {error}");
         std::process::exit(1);
     }

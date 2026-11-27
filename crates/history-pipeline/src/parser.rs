@@ -40,6 +40,15 @@ const RESERVED: &[&str] = &[
     "not",
     "true",
     "false",
+    "algebra",
+    "single",
+    "concat",
+    "choice",
+    "intersection",
+    "star",
+    "negate",
+    "any_of",
+    "all_of",
 ];
 const UNSUPPORTED: &[&str] = &[
     "summarize",
@@ -236,6 +245,14 @@ struct Tree<E: Event> {
     depth: usize,
 }
 
+impl<E: Event> Tree<E> {
+    fn dispose(self) {
+        if let Expr::Language(tail) = self.expression {
+            Rule::new(RuleMode::Require, Head::new([]), tail).dispose();
+        }
+    }
+}
+
 struct Parser<'a, E: Event, V: Vocabulary<E>> {
     tokens: Vec<Token<'a>>,
     at: usize,
@@ -248,6 +265,7 @@ struct Parser<'a, E: Event, V: Vocabulary<E>> {
     names: Vec<String>,
     environment: Vec<Binding>,
     rules: Vec<NamedRule<E>>,
+    in_rule: bool,
 }
 
 pub(super) fn parse<E: Event, V: Vocabulary<E>>(
@@ -306,11 +324,20 @@ pub(super) fn parse<E: Event, V: Vocabulary<E>>(
         names: Vec::new(),
         environment: Vec::new(),
         rules: Vec::new(),
+        in_rule: false,
     };
     parser.file()?;
     Ok(Document {
-        rules: parser.rules,
+        rules: core::mem::take(&mut parser.rules),
     })
+}
+
+impl<E: Event, V: Vocabulary<E>> Drop for Parser<'_, E, V> {
+    fn drop(&mut self) {
+        for item in self.rules.drain(..) {
+            item.rule.dispose();
+        }
+    }
 }
 
 fn identifier(s: &str) -> bool {
@@ -526,6 +553,7 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
             return Err(self.fail(ErrorKind::Kind, "rule requires a candidate selector"));
         };
         self.environment = bindings;
+        self.in_rule = true;
         self.expect("|")?;
         let mode = if self.eat("require") {
             RuleMode::Require
@@ -538,6 +566,7 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
         let Expr::Language(tail) = tree.expression else {
             return Err(self.fail(ErrorKind::Kind, "rule tail must be a history language"));
         };
+        let mut pending = PendingRule(Some(Rule::new(mode, head, tail)));
         self.expect("|")?;
         let diagnostic = if self.eat("deny") {
             let message = self.string()?;
@@ -589,10 +618,11 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
                 start: start.start,
                 end,
             },
-            rule: Rule::new(mode, head, tail),
+            rule: pending.0.take().expect("pending typed rule"),
             diagnostic,
         });
         self.environment.clear();
+        self.in_rule = false;
         Ok(())
     }
     fn expression(&mut self) -> Result<Tree<E>, Error> {
@@ -816,7 +846,7 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
     }
     fn event(&mut self) -> Result<Tree<E>, Error> {
         self.expect("Event")?;
-        let mut tree = self.leaf(Expr::Predicate(TestExpr::True))?;
+        let mut tree = None;
         while self.token().text == "|"
             && self
                 .tokens
@@ -825,9 +855,15 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
         {
             self.at += 2;
             let next = self.predicate()?;
-            tree = self.boolean(tree, next, true)?;
+            tree = Some(match tree {
+                Some(previous) => self.boolean(previous, next, true)?,
+                None => next,
+            });
         }
-        Ok(tree)
+        match tree {
+            Some(tree) => Ok(tree),
+            None => self.leaf(Expr::Predicate(TestExpr::True)),
+        }
     }
     fn predicate(&mut self) -> Result<Tree<E>, Error> {
         self.nested(|p| {
@@ -848,6 +884,42 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
         Ok(left)
     }
     fn unary(&mut self) -> Result<Tree<E>, Error> {
+        if ["any_of", "all_of"].contains(&self.token().text) {
+            let and = self.eat("all_of");
+            if !and {
+                self.expect("any_of")?;
+            }
+            self.expect("(")?;
+            self.charge(1)?;
+            let mut children = Vec::new();
+            let mut nodes = 1;
+            let mut depth = 1;
+            if !self.eat(")") {
+                loop {
+                    let child = self.predicate()?;
+                    nodes += child.nodes;
+                    depth = depth.max(child.depth + 1);
+                    self.depth(depth)?;
+                    let Expr::Predicate(test) = child.expression else {
+                        return Err(self.fail(ErrorKind::Kind, "expected predicate"));
+                    };
+                    children.push(test);
+                    if self.eat(")") {
+                        break;
+                    }
+                    self.expect(",")?;
+                }
+            }
+            return Ok(Tree {
+                expression: Expr::Predicate(if and {
+                    TestExpr::And(children)
+                } else {
+                    TestExpr::Or(children)
+                }),
+                nodes,
+                depth,
+            });
+        }
         if self.eat("not") {
             self.expect("(")?;
             let mut tree = self.predicate()?;
@@ -926,7 +998,9 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
         self.nested(|p| {
             let tree = if p.eat("History") {
                 p.expect("|")?;
-                if p.eat("any") {
+                if p.eat("algebra") {
+                    p.algebra()?
+                } else if p.eat("any") {
                     p.leaf(Expr::Language(RegexExpr::All))?
                 } else if p.eat("empty") {
                     p.leaf(Expr::Language(RegexExpr::Epsilon))?
@@ -988,7 +1062,10 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
                 }
             } else if p.eat("(") {
                 let tree = p.history()?;
-                p.expect(")")?;
+                if let Err(error) = p.expect(")") {
+                    tree.dispose();
+                    return Err(error);
+                }
                 tree
             } else {
                 let tree = p.reference()?;
@@ -1009,6 +1086,13 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
             if !["also", "either", "complement"].contains(&stage) {
                 break;
             }
+            if left.depth > self.limits.nesting {
+                left.dispose();
+                return Err(self.fail(
+                    ErrorKind::Limit,
+                    "combine deep generated languages inside algebra",
+                ));
+            }
             self.at += 2;
             self.charge(1)?;
             if stage == "complement" {
@@ -1025,13 +1109,21 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
                 // A stage takes one primary; parentheses admit an entire pipeline.
                 let right = if self.eat("(") {
                     let right = self.history()?;
-                    self.expect(")")?;
+                    if let Err(error) = self.expect(")") {
+                        left.dispose();
+                        right.dispose();
+                        return Err(error);
+                    }
                     right
                 } else {
                     self.reference()?
                 };
                 let depth = left.depth.max(right.depth) + 1;
-                self.depth(depth)?;
+                if let Err(error) = self.depth(depth) {
+                    left.dispose();
+                    right.dispose();
+                    return Err(error);
+                }
                 let (Expr::Language(l), Expr::Language(r)) = (left.expression, right.expression)
                 else {
                     return Err(self.fail(ErrorKind::Kind, "also/either require history languages"));
@@ -1048,6 +1140,127 @@ impl<'a, E: Event, V: Vocabulary<E>> Parser<'a, E, V> {
             }
         }
         Ok(left)
+    }
+
+    fn algebra(&mut self) -> Result<Tree<E>, Error> {
+        if !self.in_rule {
+            return Err(self.fail(
+                ErrorKind::Kind,
+                "algebra is an inline rule language; use ordinary named pipelines for helpers",
+            ));
+        }
+        self.expect("{")?;
+        let mut stack = AlgebraStack::<E>(Vec::new());
+        while !self.eat("}") {
+            let instruction = self.token();
+            if self.eat("single") {
+                let tree = self.predicate_arg()?;
+                self.charge(1)?;
+                let Expr::Predicate(test) = tree.expression else {
+                    return Err(self.fail(ErrorKind::Kind, "single requires predicate"));
+                };
+                stack
+                    .0
+                    .push((RegexExpr::Test(test), tree.nodes + 1, tree.depth + 1));
+            } else if self.eat("any") {
+                self.charge(1)?;
+                stack.0.push((RegexExpr::All, 1, 1));
+            } else if self.eat("empty") {
+                self.charge(1)?;
+                stack.0.push((RegexExpr::Epsilon, 1, 1));
+            } else if self.eat("never") {
+                self.charge(1)?;
+                stack.0.push((RegexExpr::Empty, 1, 1));
+            } else if self.eat("star") || self.eat("negate") {
+                self.charge(1)?;
+                let (_, _, depth) = stack
+                    .0
+                    .last()
+                    .ok_or_else(|| self.fail(ErrorKind::Syntax, "algebra stack underflow"))?;
+                if *depth >= 512 {
+                    return Err(self.fail(ErrorKind::Limit, "algebra tree depth exceeds 512"));
+                }
+                let (child, nodes, depth) = stack.0.pop().expect("checked stack");
+                let regex = if instruction.text == "star" {
+                    RegexExpr::star(child)
+                } else {
+                    RegexExpr::complement(child)
+                };
+                stack.0.push((regex, nodes + 1, depth + 1));
+            } else if ["concat", "choice", "intersection"].contains(&instruction.text) {
+                self.at += 1;
+                let count_token = self.token();
+                if !count_token.text.bytes().all(|b| b.is_ascii_digit())
+                    || count_token.text.is_empty()
+                {
+                    return Err(self.fail(ErrorKind::Syntax, "expected algebra operand count"));
+                }
+                let count: usize = count_token
+                    .text
+                    .parse()
+                    .map_err(|_| self.fail(ErrorKind::Limit, "operand count overflow"))?;
+                self.at += 1;
+                if count > stack.0.len() {
+                    return Err(self.fail(ErrorKind::Syntax, "algebra stack underflow"));
+                }
+                self.charge(1)?;
+                let offset = stack.0.len() - count;
+                let depth = stack.0[offset..]
+                    .iter()
+                    .map(|(_, _, d)| *d + 1)
+                    .max()
+                    .unwrap_or(1);
+                if depth > 512 {
+                    return Err(self.fail(ErrorKind::Limit, "algebra tree depth exceeds 512"));
+                }
+                let mut nodes = 1;
+                let children = stack
+                    .0
+                    .drain(offset..)
+                    .map(|(r, n, _)| {
+                        nodes += n;
+                        r
+                    })
+                    .collect();
+                let regex = match instruction.text {
+                    "concat" => RegexExpr::Concat(children),
+                    "choice" => RegexExpr::Union(children),
+                    _ => RegexExpr::Intersect(children),
+                };
+                stack.0.push((regex, nodes, depth));
+            } else {
+                return Err(self.fail(ErrorKind::Unsupported, "unknown algebra instruction"));
+            }
+            self.expect(";")?;
+        }
+        if stack.0.len() != 1 {
+            return Err(self.fail(ErrorKind::Syntax, "algebra must leave exactly one language"));
+        }
+        let (regex, nodes, depth) = stack.0.pop().expect("checked stack");
+        Ok(Tree {
+            expression: Expr::Language(regex),
+            nodes,
+            depth,
+        })
+    }
+}
+
+struct AlgebraStack<E: Event>(Vec<(RegexExpr<E>, usize, usize)>);
+
+struct PendingRule<E: Event>(Option<Rule<E>>);
+impl<E: Event> Drop for PendingRule<E> {
+    fn drop(&mut self) {
+        if let Some(rule) = self.0.take() {
+            rule.dispose();
+        }
+    }
+}
+
+impl<E: Event> Drop for AlgebraStack<E> {
+    fn drop(&mut self) {
+        for (tail, _, _) in self.0.drain(..) {
+            Rule::new(RuleMode::Require, Head::new([]), tail).dispose();
+        }
     }
 }
 

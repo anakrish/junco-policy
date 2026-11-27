@@ -5,9 +5,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use history_pipeline::{Literal, Vocabulary};
 use history_semantics::PolicyDecision;
 use history_store::{History, Store};
+use history_syntax::Component;
 use junco_policy::{FlowAction, FlowEvent, FlowPolicy, FlowRule};
+use junco_policy::{FlowComponent, RuleSet};
 use rig_core::completion::{CompletionRequest, CompletionResponse, ToolDefinition};
 use rig_core::http_client::DynHttpClient;
 use rig_core::message::{Message, ToolChoice, ToolName, ToolResultContent};
@@ -208,15 +211,49 @@ impl FromStr for Agent {
 
 pub type CamelEvent = FlowEvent<Agent, Handle, Class>;
 
+#[path = "../support/pipelines.rs"]
+mod pipelines;
+
+struct CamelVocabulary;
+impl Vocabulary<CamelEvent> for CamelVocabulary {
+    fn schema(&self) -> &str {
+        "Flow"
+    }
+    fn fields(&self) -> &[&str] {
+        &["principal", "handle", "action", "label"]
+    }
+    fn constant(
+        &self,
+        field: Component,
+        literal: &Literal,
+    ) -> Option<FlowComponent<Agent, Handle, Class>> {
+        match (field.0, literal) {
+            (0, Literal::String(s)) => s.parse().ok().map(FlowComponent::Principal),
+            (1, Literal::Integer(n)) => u32::try_from(*n)
+                .ok()
+                .map(|n| FlowComponent::Handle(Handle(n))),
+            (2, Literal::String(s)) => s.parse().ok().map(FlowComponent::Action),
+            (3, Literal::String(s)) => s.parse().ok().map(FlowComponent::Label),
+            _ => None,
+        }
+    }
+}
+
 pub fn camel_policy() -> FlowPolicy<Agent, Handle, Class> {
+    let sources = pipelines::load(include_str!("camel.pipeline"), &CamelVocabulary);
+    assert_eq!(sources.len(), 2);
     FlowPolicy::new()
-        .rule(FlowRule::no_contact_after_read(
-            Class::Untrusted,
-            &[Class::Sink],
-        ))
-        .rule(FlowRule::no_contact_after_read(
-            Class::Private,
-            &[Class::Peer],
+        .rule(RuleSet::new(
+            sources
+                .into_iter()
+                .zip([
+                    (Class::Untrusted, Class::Sink),
+                    (Class::Private, Class::Peer),
+                ])
+                .map(|(source, (tainted, sink))| {
+                    FlowRule::no_contact_after_read_source(source, tainted, sink)
+                })
+                .collect(),
         ))
         .audit()
 }

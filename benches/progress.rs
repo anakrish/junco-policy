@@ -23,6 +23,9 @@ use junco_core::Request;
 use junco_policy::{Action, LockComponent, LockEvent};
 use std::sync::Arc;
 
+#[path = "support/pipelines.rs"]
+mod pipelines;
+
 const HISTORY_LENGTHS: [usize; 4] = [16, 4096, 8192, 16384];
 
 /// Benchmark principal identity.
@@ -38,82 +41,91 @@ const BOB: Actor = Actor(1);
 const RESOURCE: Path = Path(0);
 const OTHER_RESOURCE: Path = Path(1);
 
-fn principal_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(Component(0), ComponentPattern::variable("actor")),
-    )
-}
+mod native_oracle {
+    use super::*;
+    fn principal_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
+        TestExpr::atom(
+            comparison,
+            AtomPattern::new(Component(0), ComponentPattern::variable("actor")),
+        )
+    }
 
-fn resource_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(Component(2), ComponentPattern::variable("resource")),
-    )
-}
+    fn resource_is(comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
+        TestExpr::atom(
+            comparison,
+            AtomPattern::new(Component(2), ComponentPattern::variable("resource")),
+        )
+    }
 
-fn action_is(action: Action, comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
-    TestExpr::atom(
-        comparison,
-        AtomPattern::new(
-            Component(1),
-            ComponentPattern::constant(LockComponent::Action(action)),
-        ),
-    )
-}
+    fn action_is(action: Action, comparison: Comparison) -> TestExpr<LockEvent<Actor, Path>> {
+        TestExpr::atom(
+            comparison,
+            AtomPattern::new(
+                Component(1),
+                ComponentPattern::constant(LockComponent::Action(action)),
+            ),
+        )
+    }
 
-fn release_head() -> Head<LockEvent<Actor, Path>> {
-    Head::new([
-        ComponentPattern::variable("actor"),
-        ComponentPattern::constant(LockComponent::Action(Action::Release)),
-        ComponentPattern::variable("resource"),
-    ])
-}
+    fn release_head() -> Head<LockEvent<Actor, Path>> {
+        Head::new([
+            ComponentPattern::variable("actor"),
+            ComponentPattern::constant(LockComponent::Action(Action::Release)),
+            ComponentPattern::variable("resource"),
+        ])
+    }
 
-/// `All · Test(principal = actor ∧ action = Edit ∧ resource = resource) · All`.
+    /// `All · Test(principal = actor ∧ action = Edit ∧ resource = resource) · All`.
+    pub(super) fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
+        let matching_edit = TestExpr::and([
+            principal_is(Comparison::Eq),
+            action_is(Action::Edit, Comparison::Eq),
+            resource_is(Comparison::Eq),
+        ]);
+        Rule::new(
+            RuleMode::Require,
+            release_head(),
+            RegexExpr::concat([
+                RegexExpr::all(),
+                RegexExpr::test(matching_edit),
+                RegexExpr::all(),
+            ]),
+        )
+    }
+
+    /// `All · Edit(r) · NonEdit(r)* · Approval(r, principal ≠ actor) · NonEdit(r)*`.
+    pub(super) fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
+        let edit = TestExpr::and([
+            resource_is(Comparison::Eq),
+            action_is(Action::Edit, Comparison::Eq),
+        ]);
+        let non_edit = TestExpr::or([
+            resource_is(Comparison::Neq),
+            action_is(Action::Edit, Comparison::Neq),
+        ]);
+        let approval = TestExpr::and([
+            resource_is(Comparison::Eq),
+            action_is(Action::Remove, Comparison::Eq),
+            principal_is(Comparison::Neq),
+        ]);
+        Rule::new(
+            RuleMode::Require,
+            release_head(),
+            RegexExpr::concat([
+                RegexExpr::all(),
+                RegexExpr::test(edit),
+                RegexExpr::star(RegexExpr::test(non_edit.clone())),
+                RegexExpr::test(approval),
+                RegexExpr::star(RegexExpr::test(non_edit)),
+            ]),
+        )
+    }
+}
 fn prior_edit_rule() -> Rule<LockEvent<Actor, Path>> {
-    let matching_edit = TestExpr::and([
-        principal_is(Comparison::Eq),
-        action_is(Action::Edit, Comparison::Eq),
-        resource_is(Comparison::Eq),
-    ]);
-    Rule::new(
-        RuleMode::Require,
-        release_head(),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(matching_edit),
-            RegexExpr::all(),
-        ]),
-    )
+    pipelines::one(pipelines::PRIOR_EDIT, Actor, Path)
 }
-
-/// `All · Edit(r) · NonEdit(r)* · Approval(r, principal ≠ actor) · NonEdit(r)*`.
 fn release_approval_rule() -> Rule<LockEvent<Actor, Path>> {
-    let edit = TestExpr::and([
-        resource_is(Comparison::Eq),
-        action_is(Action::Edit, Comparison::Eq),
-    ]);
-    let non_edit = TestExpr::or([
-        resource_is(Comparison::Neq),
-        action_is(Action::Edit, Comparison::Neq),
-    ]);
-    let approval = TestExpr::and([
-        resource_is(Comparison::Eq),
-        action_is(Action::Remove, Comparison::Eq),
-        principal_is(Comparison::Neq),
-    ]);
-    Rule::new(
-        RuleMode::Require,
-        release_head(),
-        RegexExpr::concat([
-            RegexExpr::all(),
-            RegexExpr::test(edit),
-            RegexExpr::star(RegexExpr::test(non_edit.clone())),
-            RegexExpr::test(approval),
-            RegexExpr::star(RegexExpr::test(non_edit)),
-        ]),
-    )
+    pipelines::one(pipelines::APPROVAL, Actor, Path)
 }
 
 /// Alice reads throughout, with her matching edit at the midpoint.
@@ -227,6 +239,16 @@ fn prior_edit_scenario(store: Arc<Store<LockEvent<Actor, Path>>>, history_len: u
         prior_edit_event(index, history_len)
     });
     assert!(scenario.validator.permits(&candidate()).unwrap());
+    let mut oracle = seed(
+        Arc::new(Store::new().unwrap()),
+        native_oracle::prior_edit_rule(),
+        history_len,
+        |index| prior_edit_event(index, history_len),
+    );
+    assert_eq!(
+        scenario.validator.permits(&candidate()).unwrap(),
+        oracle.validator.permits(&candidate()).unwrap()
+    );
     scenario
 }
 
@@ -244,6 +266,16 @@ fn release_approval_scenario(
             scenario.validator.permits(&candidate()).unwrap(),
             expected,
             "{case:?}/{history_len}"
+        );
+        let mut oracle = seed(
+            Arc::new(Store::new().unwrap()),
+            native_oracle::release_approval_rule(),
+            history_len,
+            |index| release_event(case, index, history_len),
+        );
+        assert_eq!(
+            scenario.validator.permits(&candidate()).unwrap(),
+            oracle.validator.permits(&candidate()).unwrap()
         );
     }
     let mut scenario = seed(store, release_approval_rule(), history_len, |index| {

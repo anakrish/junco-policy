@@ -1,0 +1,15 @@
+schema Flow(principal, handle, action, label);
+let Taint = (p:principal, v:handle, l:label) {
+    Event | where all_of(principal == p, handle == v,
+        any_of(action == "read", action == "receive"), label == l)
+};
+let Clear = (p:principal, v:handle, l:label) {
+    Event | where all_of(principal == p, handle == v, action == "declassify", label == l)
+};
+let Tainted = (p:principal, v:handle, l:label) {
+    History | active(Taint(p,v,l),reset=Clear(p,v,l))
+};
+let Sink = Candidate | bind principal=p, handle=v | where action == "contact" and label == "sink";
+let Peer = Candidate | bind principal=p, handle=v | where action == "contact" and label == "peer";
+rule Untrusted = Sink | forbid Tainted(p,v,"untrusted") | deny "native diagnostic";
+rule Private = Peer | forbid Tainted(p,v,"private") | deny "native diagnostic";

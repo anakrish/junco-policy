@@ -1,10 +1,9 @@
 //! Translates standard regex syntax (parsed by `regex_syntax` in byte mode) into
-//! `history_syntax` regexes over `Symbol` events, one byte per event.
+//! textual pipeline algebra over `Symbol` events, one byte per event.
 
-use history_syntax::{
-    AtomPattern, Comparison, Component, Component3, ComponentPattern, Event, N3, RegexExpr,
-    TestExpr,
-};
+use super::pipelines::Language as RegexExpr;
+use history_pipeline::{Literal, Vocabulary};
+use history_syntax::{Component, Component3, Event, N3};
 use regex_syntax::hir::{Class, Hir, HirKind, Look};
 
 /// One haystack byte as an open-domain resource, or the candidate triggering the rule.
@@ -14,6 +13,26 @@ pub enum Symbol {
     Candidate,
 }
 
+pub struct Vocab;
+impl Vocabulary<Symbol> for Vocab {
+    fn schema(&self) -> &str {
+        "Symbol"
+    }
+    fn fields(&self) -> &[&str] {
+        &["principal", "action", "resource"]
+    }
+    fn constant(&self, field: Component, literal: &Literal) -> Option<Component3<(), (), Symbol>> {
+        match (field.0, literal) {
+            (0, Literal::Integer(0)) => Some(Component3::C0(())),
+            (1, Literal::Integer(0)) => Some(Component3::C1(())),
+            (2, Literal::Integer(n)) => u8::try_from(*n)
+                .ok()
+                .map(|n| Component3::C2(Symbol::Byte(n))),
+            (2, Literal::String(s)) if s == "candidate" => Some(Component3::C2(Symbol::Candidate)),
+            _ => None,
+        }
+    }
+}
 // Unverified glue: `hash_respects_eq` is a hypothesis for this type (as `event_laws` already is).
 impl history_syntax::KeyHash for Symbol {
     fn key_hash(&self) -> u64 {
@@ -129,31 +148,28 @@ pub fn class(members: impl IntoIterator<Item = u8>) -> RegexExpr<Symbol> {
         table[usize::from(byte)] = true;
     }
     let count = table.iter().filter(|&&member| member).count();
-    let atom = |comparison, byte| {
-        TestExpr::atom(
-            comparison,
-            AtomPattern::new(
-                Component(2),
-                ComponentPattern::constant(Component3::C2(Symbol::Byte(byte))),
-            ),
-        )
-    };
     match count {
         0 => RegexExpr::empty(),
-        256 => RegexExpr::test(TestExpr::true_test()),
-        1 => RegexExpr::test(atom(
-            Comparison::Eq,
-            (0..=255u8).find(|&b| table[usize::from(b)]).unwrap(),
+        256 => RegexExpr::test("true"),
+        1 => RegexExpr::test(format!(
+            "resource == {}",
+            (0..=255u8).find(|&b| table[usize::from(b)]).unwrap()
         )),
-        2..=128 => RegexExpr::test(TestExpr::or(
+        2..=128 => RegexExpr::test(format!(
+            "any_of({})",
             (0..=255u8)
                 .filter(|&b| table[usize::from(b)])
-                .map(|b| atom(Comparison::Eq, b)),
+                .map(|b| format!("resource == {b}"))
+                .collect::<Vec<_>>()
+                .join(",")
         )),
-        _ => RegexExpr::test(TestExpr::and(
+        _ => RegexExpr::test(format!(
+            "all_of({})",
             (0..=255u8)
                 .filter(|&b| !table[usize::from(b)])
-                .map(|b| atom(Comparison::Neq, b)),
+                .map(|b| format!("resource != {b}"))
+                .collect::<Vec<_>>()
+                .join(",")
         )),
     }
 }

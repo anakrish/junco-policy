@@ -187,33 +187,46 @@ impl<P: Label, V: Label, L: Label> FlowRule<P, V, L> {
             sinks
                 .iter()
                 .map(|&sink| {
-                    TraceRule::new(
+                    Self::no_contact_after_read_source(
                         Rule::new(
                             RuleMode::Forbid,
                             Head::new([
                                 ComponentPattern::variable(PRINCIPAL_VAR),
                                 ComponentPattern::variable(HANDLE_VAR),
-                                ComponentPattern::constant(FlowComponent::Action(FlowAction::Contact)),
+                                ComponentPattern::constant(FlowComponent::Action(
+                                    FlowAction::Contact,
+                                )),
                                 ComponentPattern::constant(FlowComponent::Label(sink)),
                             ]),
                             tail.clone(),
                         ),
-                        move |event: &FlowEvent<P, V, L>| {
-                            (
-                                format!(
-                                    "{} passed {} to a {sink} sink after receiving {tainted} data",
-                                    event.principal, event.handle
-                                ),
-                                vec![format!(
-                                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
-                                    event.principal, event.handle
-                                )],
-                            )
-                        },
+                        tainted,
+                        sink,
                     )
                 })
                 .collect(),
         )
+    }
+
+    /// Pairs a caller-authored taint rule with the exact native contact diagnostic.
+    /// The caller supplies its semantics; this never constructs a replacement tail.
+    pub fn no_contact_after_read_source(
+        source: Rule<FlowEvent<P, V, L>>,
+        tainted: L,
+        sink: L,
+    ) -> TraceRule<FlowEvent<P, V, L>> {
+        TraceRule::new(source, move |event: &FlowEvent<P, V, L>| {
+            (
+                format!(
+                    "{} passed {} to a {sink} sink after receiving {tainted} data",
+                    event.principal, event.handle
+                ),
+                vec![format!(
+                    "declassify {tainted} for {}'s copy of {}, or pass a value not derived from {tainted} data",
+                    event.principal, event.handle
+                )],
+            )
+        })
     }
 }
 

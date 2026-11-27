@@ -1,0 +1,7 @@
+schema Lock(principal, action, resource);
+rule DuplicateRemove = Candidate | bind principal=p, resource=r | where action == "remove"
+    | forbid History | algebra {
+        any;
+        single (Event | where all_of(action == "remove", resource == r));
+        any; concat 3;
+    } | deny "benchmark";

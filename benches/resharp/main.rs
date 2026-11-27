@@ -10,10 +10,12 @@ use std::time::{Duration, Instant};
 use criterion::{Criterion, SamplingMode, Throughput, criterion_group};
 use history_semantics::Validator;
 use history_store::{Checkpoint, Store};
-use history_syntax::{Component3, ComponentPattern, Head, RegexExpr, Rule, RuleMode};
 use junco_core::Request;
+use pipelines::Language as RegexExpr;
 use resharp::{RegexOptions, UnicodeMode};
 
+#[path = "../support/pipelines.rs"]
+mod pipelines;
 mod translate;
 
 use translate::{Symbol, class, contains, literal, plain, tail, translate};
@@ -108,24 +110,20 @@ fn resharp_regex(pattern: &str) -> resharp::Regex {
     .expect(pattern)
 }
 
-fn candidate_head() -> Head<Symbol> {
-    Head::new([
-        ComponentPattern::variable("P"),
-        ComponentPattern::variable("A"),
-        ComponentPattern::constant(Component3::C2(Symbol::Candidate)),
-    ])
-}
-
 struct Scenario {
     validator: Validator<Symbol>,
     replay: Option<(Checkpoint, Symbol)>,
 }
 
 fn seed(junco: RegexExpr<Symbol>, haystack: &[u8]) -> Scenario {
+    let source = pipelines::language_rule(
+        junco,
+        &translate::Vocab,
+        "Candidate | where resource == \"candidate\"",
+        "require",
+    );
     let mut builder = Validator::builder(Arc::new(Store::new().unwrap()));
-    builder
-        .add_rule(Rule::new(RuleMode::Require, candidate_head(), junco))
-        .expect("workload tail compiles");
+    builder.add_rule(source).expect("workload tail compiles");
     let mut validator = builder.finish().unwrap();
     let mut replay = None;
     for (index, &byte) in haystack.iter().enumerate() {

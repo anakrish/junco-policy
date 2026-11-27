@@ -442,3 +442,43 @@ fn typed_expansions_are_hygienic_and_accept_constants() {
         }
     );
 }
+
+#[test]
+fn algebra_singletons_zero_operand_identities_and_whole_language_negation_are_preserved() {
+    let store = Arc::new(Store::new().unwrap());
+    for (instructions, accepted_lengths) in [
+        ("single (Event | where true);", vec![1]),
+        ("single (Event | where false);", vec![]),
+        ("single (Event | where true); negate;", vec![0, 2]),
+        ("single (Event | where not(true));", vec![]),
+        ("concat 0;", vec![0]),
+        ("choice 0;", vec![]),
+        ("intersection 0;", vec![0, 1, 2]),
+        ("single (Event | where all_of());", vec![1]),
+        ("single (Event | where any_of());", vec![]),
+        (
+            "single (Event | where true); single (Event | where true); concat 2;",
+            vec![2],
+        ),
+        ("single (Event | where true); star;", vec![0, 1, 2]),
+    ] {
+        let source = format!(
+            "schema Lock(principal,action,resource); rule R = Candidate | require History | algebra {{ {instructions} }} | deny \"x\";"
+        );
+        let mut policy = compile(
+            parse(&source, &Lock, Limits::default()).unwrap(),
+            store.clone(),
+        )
+        .unwrap();
+        for length in 0..=2 {
+            let history =
+                History::from_events(store.clone(), std::iter::repeat_n((1, READ, 9), length))
+                    .unwrap();
+            assert_eq!(
+                policy.decide(&history, &(1, READ, 9)).unwrap() == PolicyDecision::Grant,
+                accepted_lengths.contains(&length),
+                "{instructions}/{length}"
+            );
+        }
+    }
+}

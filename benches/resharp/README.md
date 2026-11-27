@@ -46,6 +46,15 @@ Unlike upstream's `popular-crates` find-all comparison, this target measures exi
 
 ## Translation
 
+The Junco translation now emits authoritative `history-pipeline` instruction
+text instead of constructing native regex ASTs. Its local `RegexExpr` type is a
+text builder; `single`, concat/choice/intersection/star/negate instructions lower
+through the frontend to the same kernel. Parsing, typing and lowering happen
+before seeding and outside every timed `permits` call. `any_of`/`all_of` preserve
+the original n-ary classes, including their open-domain behavior. All standard
+and custom workloads, backend formulas and timing boundaries remain unchanged.
+The port is checked with Criterion smoke preflights, not new latency measurements.
+
 `translate.rs` parses standard syntax using `regex-syntax` with UTF-8 and Unicode disabled.
 `Symbol::Byte(u8)` is an event with unit principal/action and the byte as its resource.
 `Symbol::Candidate` is the only event matching the rule head. Haystack `check`s therefore append
