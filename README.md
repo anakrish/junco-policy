@@ -9,6 +9,12 @@ Check a proposed action against what has already happened. A rule can require a 
 edit, forbid a stale write, or bind a decision to the principal and resource in the
 request. Retained policies compile once and reuse their progress as histories grow.
 
+For bounded textual policies, [history-pipeline](crates/history-pipeline/README.md)
+provides KQL-inspired candidate/event pipelines and whole-history evidence queries.
+It lowers to the existing typed DSL, not a table evaluator, and is not Kusto/KQL
+compatible. Its parser and host vocabulary are outside the Verus proof boundary.
+Runnable prior-edit, seven-rule lock and declassification examples are included.
+
 ## Check a proposed action
 
 The `junco-policy` crate supplies ownership-lock, classified-agent and information-flow policies.

@@ -1,0 +1,18 @@
+schema Flow(principal, handle, action, label);
+
+let Taint = (p:principal, v:handle) {
+    Event | where principal == p and handle == v and label == "untrusted"
+        and (action == "read" or action == "receive")
+};
+let ClearTaint = (p:principal, v:handle) {
+    Event | where principal == p and handle == v and label == "untrusted" and action == "declassify"
+};
+let TaintedCopy = (p:principal, v:handle) {
+    History | active(Taint(p, v), reset=ClearTaint(p, v))
+};
+let ContactSink = Candidate | bind principal=p, handle=v
+    | where action == "contact" and label == "sink";
+
+rule no_tainted_copy_contact = ContactSink | forbid TaintedCopy(p, v)
+    | deny "This principal's copy of this handle is tainted."
+      fix "Declassify this copy's untrusted label or use an untainted value.";

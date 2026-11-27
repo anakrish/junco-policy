@@ -1,0 +1,39 @@
+schema Lock(principal, action, resource);
+
+let ForeignEdit = (p:principal, r:resource) {
+    Event | where resource == r and action == "edit" and principal != p
+};
+let ForeignRead = (p:principal, r:resource) {
+    Event | where resource == r and action == "read" and principal != p
+};
+let OwnerChange = (r:resource) {
+    Event | where resource == r and (action == "edit" or action == "release" or action == "remove")
+};
+let ReaderChange = (r:resource) {
+    Event | where resource == r and (action == "read" or action == "remove")
+};
+let FreshnessChange = (p:principal, r:resource) {
+    Event | where resource == r and
+        (action == "edit" or action == "remove" or (action == "read" and principal == p))
+};
+let ForeignOwner = (p:principal, r:resource) {
+    History | active(ForeignEdit(p, r), reset=OwnerChange(r))
+};
+let StaleView = (p:principal, r:resource) {
+    History | active(ForeignEdit(p, r), reset=FreshnessChange(p, r))
+};
+let ForeignReader = (p:principal, r:resource) {
+    History | active(ForeignRead(p, r), reset=ReaderChange(r))
+};
+
+let Editing = Candidate | bind principal=p, resource=r | where action == "edit";
+let Releasing = Candidate | bind principal=p, resource=r | where action == "release";
+let Removing = Candidate | bind principal=p, resource=r | where action == "remove";
+
+rule owner_edit = Editing | forbid ForeignOwner(p, r) | diagnostic lock_owner;
+rule owner_release = Releasing | forbid ForeignOwner(p, r) | diagnostic lock_owner;
+rule owner_remove = Removing | forbid ForeignOwner(p, r) | diagnostic lock_owner;
+rule stale_edit = Editing | forbid StaleView(p, r) | diagnostic lock_stale;
+rule stale_remove = Removing | forbid StaleView(p, r) | diagnostic lock_stale;
+rule reader_edit = Editing | forbid ForeignReader(p, r) | diagnostic lock_reader;
+rule reader_remove = Removing | forbid ForeignReader(p, r) | diagnostic lock_reader;

@@ -1,0 +1,11 @@
+schema Lock(principal, action, resource);
+
+let EditBy = (p:principal, r:resource) {
+    Event | where principal == p and action == "edit" and resource == r
+};
+let Release = Candidate | bind principal=p, resource=r | where action == "release";
+let PriorEdit = (p:principal, r:resource) { History | exists(EditBy(p, r)) };
+
+rule release_needs_edit = Release
+    | require PriorEdit(p, r)
+    | deny "Release requires an earlier matching edit.";
