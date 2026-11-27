@@ -1,0 +1,23 @@
+[package]
+name = "history-text"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[features]
+default = []
+std = ["history-syntax/std", "junco-core/std", "history-store?/std", "history-semantics?/std"]
+runtime = ["dep:history-store", "dep:history-semantics", "history-store/runtime", "history-semantics/runtime"]
+cache = ["history-semantics?/cache"]
+
+[dependencies]
+history-syntax = { path = "../history-syntax", default-features = false }
+junco-core = { path = "../junco-core", default-features = false }
+history-store = { path = "../history-store", default-features = false, optional = true }
+history-semantics = { path = "../history-semantics", default-features = false, optional = true }
+
+[[example]]
+name = "policies"
+required-features = ["runtime"]

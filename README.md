@@ -9,6 +9,12 @@ Check a proposed action against what has already happened. A rule can require a 
 edit, forbid a stale write, or bind a decision to the principal and resource in the
 request. Retained policies compile once and reuse their progress as histories grow.
 
+For authored policies, [`history-text`](crates/history-text/README.md) implements
+Junco Text v1: schema-checked named candidate heads and explicit regular languages
+over complete histories. It lowers to the existing typed Rust DSL; its parser and
+host vocabulary are outside the Verus proof boundary. Runnable prior-edit,
+owner/freshness and information-flow examples ship in that crate.
+
 ## Check a proposed action
 
 The `junco-policy` crate supplies ownership-lock, classified-agent and information-flow policies.

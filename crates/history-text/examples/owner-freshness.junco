@@ -1,0 +1,22 @@
+junco 1;
+schema "lock/1";
+policy edit_checks {
+  rule foreign_owner {
+    candidate { principal: $p, action: action.edit, resource: $r };
+    forbid all >> event {
+      resource == $r and action == action.edit and principal != $p
+    } >> event {
+      resource != $r or
+      (action != action.edit and action != action.release and action != action.remove)
+    }*;
+  }
+  rule stale_view {
+    candidate { principal: $p, action: action.edit, resource: $r };
+    forbid all >> event {
+      resource == $r and action == action.edit and principal != $p
+    } >> event {
+      (resource != $r or (action != action.edit and action != action.remove))
+      and (resource != $r or action != action.read or principal != $p)
+    }*;
+  }
+}

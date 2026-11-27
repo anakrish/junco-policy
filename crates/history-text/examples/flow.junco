@@ -1,0 +1,15 @@
+junco 1;
+schema "flow/1";
+policy information_flow {
+  const tainted: label = "untrusted";
+  const destination: label = "sink";
+  rule no_tainted_contact {
+    candidate { principal: $p, handle: $v, action: action.contact, label: destination };
+    forbid all >> event {
+      principal == $p and handle == $v and
+      (action == action.read or action == action.receive) and label == tainted
+    } >> event {
+      principal != $p or handle != $v or action != action.declassify or label != tainted
+    }*;
+  }
+}

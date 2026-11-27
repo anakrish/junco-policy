@@ -791,6 +791,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "history-text"
+version = "0.1.0"
+dependencies = [
+ "history-semantics",
+ "history-store",
+ "history-syntax",
+ "junco-core",
+]
+
+[[package]]
 name = "http"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

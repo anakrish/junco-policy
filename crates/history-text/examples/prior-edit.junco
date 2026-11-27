@@ -1,0 +1,10 @@
+junco 1;
+schema "lock/1";
+policy release_checks {
+  rule prior_edit {
+    candidate { principal: $p, action: action.release, resource: $r };
+    require all >> event {
+      principal == $p and action == action.edit and resource == $r
+    } >> all;
+  }
+}

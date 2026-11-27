@@ -53,6 +53,13 @@ jobs:
       - name: Unit tests
         run: cargo test --locked --workspace --features junco-policy/test-util
 
+      - name: Junco Text frontend
+        run: |
+          cargo fmt --check -p history-text
+          cargo check --locked -p history-text --no-default-features
+          cargo clippy --locked --no-deps -p history-text --all-features --all-targets -- -D warnings
+          cargo test --locked -p history-text --all-features
+
       - name: No-surprise oracle
         # Release: generation re-checks the whole history at every step (166s debug vs 23s release).
         run: cargo test --locked --release --manifest-path fuzz/Cargo.toml --lib
